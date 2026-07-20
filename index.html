@@ -16,6 +16,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   body { margin: 0; background: #12151B; }
 </style>
@@ -24,6 +27,28 @@
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 const { useState, useMemo } = React;
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCWsNzyrcUREB6xGWOGdF7iUevkUIdd0js",
+  authDomain: "etronic-fleet.firebaseapp.com",
+  projectId: "etronic-fleet",
+  storageBucket: "etronic-fleet.firebasestorage.app",
+  messagingSenderId: "987528911688",
+  appId: "1:987528911688:web:c53fa37e6e3ae4a76df17d"
+};
+
+let firebaseInitError = null;
+let auth, secondaryAuth, db;
+try {
+  firebase.initializeApp(firebaseConfig);
+  // Secondary app instance so admin can create employee accounts without being signed out
+  const secondaryApp = firebase.initializeApp(firebaseConfig, "secondary");
+  auth = firebase.auth();
+  secondaryAuth = secondaryApp.auth();
+  db = firebase.firestore();
+} catch (e) {
+  firebaseInitError = e;
+}
 
 function makeIcon(symbol) {
   return function Icon({ size = 16, color }) {
@@ -51,7 +76,7 @@ const Navigation = makeIcon("🧭");
 
 const C = {
   bg: "#12151B", surface: "#1A1F28", surface2: "#212837", border: "#2A313D",
-  amber: "#E3A23D", teal: "#3FA796", red: "#E15D44", text: "#EDEBE4", muted: "#8B93A3",
+  amber: "#2F7BF2", teal: "#3FA796", red: "#E15D44", text: "#EDEBE4", muted: "#8B93A3",
 };
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -102,7 +127,7 @@ function KpiCard({ icon: Icon, value, label, color }) {
   );
 }
 
-function DashboardTab() {
+function DashboardTab({ customersCount, employeesCount }) {
   const totalTrips = TRIPS.length;
   const uniqueClientsServed = new Set(TRIPS.map(t => t.clientCode)).size;
   const activeDrivers = new Set(TRIPS.map(t => t.empCode)).size;
@@ -123,8 +148,8 @@ function DashboardTab() {
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Route} value={totalTrips} label="إجمالي الرحلات المسجلة" color={C.amber} />
-        <KpiCard icon={Building2} value={CUSTOMERS.length} label="عدد العملاء في قاعدة البيانات" color={C.teal} />
-        <KpiCard icon={Users} value={EMPLOYEES.length} label="عدد الموظفين" color={C.amber} />
+        <KpiCard icon={Building2} value={customersCount} label="عدد العملاء في قاعدة البيانات" color={C.teal} />
+        <KpiCard icon={Users} value={employeesCount} label="عدد الموظفين" color={C.amber} />
         <KpiCard icon={Truck} value={VEHICLES.length} label="عدد العربيات النشطة" color={C.teal} />
         <KpiCard icon={TrendingUp} value={activeDrivers} label="سائقين نفذوا رحلات فعليًا" color={C.amber} />
       </div>
@@ -174,29 +199,65 @@ function VehiclesTab() {
   );
 }
 
-function EmployeesTab() {
+function EmployeesTab({ employees, setEmployees }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const filtered = useMemo(() => EMPLOYEES.filter(e =>
+  const [form, setForm] = useState({ name: "", code: "", position: "", department: "", phone: "" });
+  const filtered = useMemo(() => employees.filter(e =>
     (e.name || "").toLowerCase().includes(q.toLowerCase()) || String(e.code).includes(q)
-  ), [q]);
+  ), [q, employees]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function addEmployee() {
+    if (!form.name || !form.code) return;
+    setEmployees([...employees, { ...form, id: Date.now() }]);
+    setForm({ name: "", code: "", position: "", department: "", phone: "" });
+    setPage(1);
+  }
+  function removeEmployee(id) {
+    if (!confirm("متأكد إنك عايز تمسح الموظف ده؟")) return;
+    setEmployees(employees.filter(e => e.id !== id));
+  }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الموظفين ({EMPLOYEES.length})</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الموظفين ({employees.length})</h2>
+
+      <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة موظف جديد</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <input placeholder="الاسم" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="الكود" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="الوظيفة" value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="القسم" value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="التليفون" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        <button onClick={addEmployee} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+          style={{ background: `${C.amber}22`, color: C.amber }}>
+          <Plus size={14} /> إضافة
+        </button>
+      </div>
+
       <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود..." />
       <div className="space-y-2">
         {paged.map(e => (
-          <div key={e.code} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-mono text-xs font-bold" style={{ background: `${C.teal}22`, color: C.teal }}>
+          <div key={e.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.teal}22`, color: C.teal }}>
               {e.code}
             </div>
-            <div className="flex-1">
-              <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{e.name}</p>
-              <p className="font-ui text-xs" style={{ color: C.muted }}>{e.position} · {e.department}</p>
+            <div className="flex-1 min-w-0">
+              <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{e.name}</p>
+              <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{e.position} · {e.department}</p>
             </div>
-            <span className="font-mono text-xs" style={{ color: C.muted }}>{e.phone}</span>
+            <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>{e.phone}</span>
+            <button onClick={() => removeEmployee(e.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
+              <Trash2 size={13} color={C.red} />
+            </button>
           </div>
         ))}
       </div>
@@ -205,71 +266,197 @@ function EmployeesTab() {
   );
 }
 
-function CustomersTab() {
+function parseMapsLink(text) {
+  if (!text) return null;
+  const patterns = [
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+    /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+  }
+  return null;
+}
+
+function CustomersTab({ customers, setCustomers, customerLocations, setCustomerLocations }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const filtered = useMemo(() => CUSTOMERS.filter(c =>
+  const [savingUid, setSavingUid] = useState(null);
+  const [editUid, setEditUid] = useState(null);
+  const [linkInput, setLinkInput] = useState("");
+  const [latInput, setLatInput] = useState("");
+  const [lngInput, setLngInput] = useState("");
+  const [form, setForm] = useState({ name: "", code: "", territory: "", governorate: "", city: "" });
+  const withUid = useMemo(() => customers.map(c => ({ ...c, uid: c.id })), [customers]);
+  const filtered = useMemo(() => withUid.filter(c =>
     (c.name || "").toLowerCase().includes(q.toLowerCase()) || String(c.code).includes(q) || (c.territory || "").toLowerCase().includes(q.toLowerCase())
-  ), [q]);
+  ), [q, withUid]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function addCustomer() {
+    if (!form.name || !form.code) return;
+    setCustomers([...customers, { ...form, id: Date.now() }]);
+    setForm({ name: "", code: "", territory: "", governorate: "", city: "" });
+    setPage(1);
+  }
+  function removeCustomer(id) {
+    if (!confirm("متأكد إنك عايز تمسح العميل ده؟")) return;
+    setCustomers(customers.filter(c => c.id !== id));
+    setCustomerLocations(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+  function saveLocation(uid) {
+    if (!navigator.geolocation) {
+      alert("المتصفح ده مش بيدعم تحديد الموقع");
+      return;
+    }
+    setSavingUid(uid);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCustomerLocations(prev => ({
+          ...prev,
+          [uid]: { lat: pos.coords.latitude, lng: pos.coords.longitude, savedAt: new Date().toISOString() }
+        }));
+        setSavingUid(null);
+      },
+      (err) => {
+        alert("مقدرناش نحدد موقعك: " + err.message + " — جرب تحفظه يدوي بدل كده");
+        setSavingUid(null);
+      },
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  }
+  function clearLocation(uid) {
+    setCustomerLocations(prev => {
+      const next = { ...prev };
+      delete next[uid];
+      return next;
+    });
+  }
+  function openEditor(uid) {
+    setEditUid(editUid === uid ? null : uid);
+    setLinkInput("");
+    const loc = customerLocations[uid];
+    setLatInput(loc ? String(loc.lat) : "");
+    setLngInput(loc ? String(loc.lng) : "");
+  }
+  function saveFromLink(uid) {
+    const parsed = parseMapsLink(linkInput.trim());
+    if (!parsed) {
+      alert("مقدرناش نلاقي إحداثيات في الرابط ده. جرب تنسخ الرابط تاني من Google Maps بعد ما تحدد نقطة على الخريطة، أو استخدم الإدخال اليدوي تحت");
+      return;
+    }
+    setCustomerLocations(prev => ({ ...prev, [uid]: { ...parsed, savedAt: new Date().toISOString() } }));
+    setEditUid(null);
+  }
+  function saveManual(uid) {
+    const lat = parseFloat(latInput), lng = parseFloat(lngInput);
+    if (isNaN(lat) || isNaN(lng)) {
+      alert("اكتب خط العرض وخط الطول كأرقام صحيحة");
+      return;
+    }
+    setCustomerLocations(prev => ({ ...prev, [uid]: { lat, lng, savedAt: new Date().toISOString() } }));
+    setEditUid(null);
+  }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>العملاء ({CUSTOMERS.length})</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>العملاء ({customers.length})</h2>
+      <p className="font-ui text-xs mb-4" style={{ color: C.muted }}>احفظ الموقع وانت عند العميل بزرار GPS، أو ضيفه من بعيد من رابط Google Maps أو بالإحداثيات مباشرة</p>
+
+      <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عميل جديد</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <input placeholder="الاسم" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="الكود" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="الإقليم" value={form.territory} onChange={e => setForm({ ...form, territory: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="المحافظة" value={form.governorate} onChange={e => setForm({ ...form, governorate: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input placeholder="المدينة" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        <button onClick={addCustomer} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+          style={{ background: `${C.amber}22`, color: C.amber }}>
+          <Plus size={14} /> إضافة
+        </button>
+      </div>
+
       <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود أو الإقليم..." />
       <div className="space-y-2">
-        {paged.map((c, i) => (
-          <div key={c.code + i} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: `${C.amber}22` }}>
-              <MapPin size={14} color={C.amber} />
-            </div>
-            <div className="flex-1">
-              <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{c.name || "بدون اسم"}</p>
-              <p className="font-ui text-xs" style={{ color: C.muted }}>{[c.territory, c.governorate, c.city].filter(Boolean).join(" · ")}</p>
-            </div>
-            <span className="font-mono text-[11px]" style={{ color: C.muted }}>{c.code}</span>
-          </div>
-        ))}
-      </div>
-      <Pager page={page} setPage={setPage} total={filtered.length} />
-    </div>
-  );
-}
+        {paged.map((c) => {
+          const loc = customerLocations[c.uid];
+          const editing = editUid === c.uid;
+          return (
+            <div key={c.uid} className="rounded-xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: loc ? `${C.teal}22` : `${C.amber}22` }}>
+                  <MapPin size={14} color={loc ? C.teal : C.amber} />
+                </div>
+                <div className="flex-1 min-w-0" onClick={() => openEditor(c.uid)}>
+                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{c.name || "بدون اسم"}</p>
+                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{[c.territory, c.governorate, c.city].filter(Boolean).join(" · ")}</p>
+                  {loc && <p className="font-mono text-[10px] mt-0.5" style={{ color: C.teal }}>📍 {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}</p>}
+                </div>
+                <span className="font-mono text-[11px] shrink-0" style={{ color: C.muted }}>{c.code}</span>
+                {loc && (
+                  <button onClick={() => clearLocation(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="امسح الموقع المحفوظ">
+                    <Trash2 size={13} color={C.red} />
+                  </button>
+                )}
+                <button onClick={() => openEditor(c.uid)}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg font-ui text-[10px] font-semibold shrink-0"
+                  style={{ background: `${C.amber}22`, color: C.amber }}>
+                  {editing ? "قفل" : (loc ? "عدّل" : "ضيف موقع")}
+                </button>
+                <button onClick={() => removeCustomer(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="امسح العميل">
+                  <Trash2 size={13} color={C.red} />
+                </button>
+              </div>
 
-function TripsTab() {
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
-  const filtered = useMemo(() => TRIPS.filter(t =>
-    (t.driverName || "").toLowerCase().includes(q.toLowerCase()) ||
-    (t.clientName || "").toLowerCase().includes(q.toLowerCase()) ||
-    (t.carNumber || "").includes(q)
-  ), [q]);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+              {editing && (
+                <div className="p-3 pt-0 space-y-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                  <button onClick={() => saveLocation(c.uid)} disabled={savingUid === c.uid}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
+                    style={{ background: `${C.teal}22`, color: C.teal }}>
+                    <MapPin size={13} /> {savingUid === c.uid ? "بيحدد موقعك دلوقتي..." : "احفظ موقعي الحالي (لازم تكون عند العميل)"}
+                  </button>
 
-  return (
-    <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>سجل الرحلات ({TRIPS.length})</h2>
-      <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالسائق أو العميل أو رقم العربية..." />
-      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-        <table className="w-full text-right font-ui text-xs">
-          <thead>
-            <tr style={{ background: C.surface2, color: C.muted }}>
-              <th className="p-2">التاريخ</th><th className="p-2">السائق</th><th className="p-2">العميل</th>
-              <th className="p-2">الإقليم</th><th className="p-2 font-mono">العربية</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map((t, i) => (
-              <tr key={i} style={{ background: i % 2 ? C.surface : C.bg, color: C.text, borderTop: `1px solid ${C.border}` }}>
-                <td className="p-2 font-mono">{t.date}</td>
-                <td className="p-2">{t.driverName}</td>
-                <td className="p-2">{t.clientName}</td>
-                <td className="p-2" style={{ color: C.muted }}>{t.territory}</td>
-                <td className="p-2 font-mono" style={{ color: C.amber }}>{t.carNumber}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <div>
+                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>أو الصق رابط من Google Maps (افتح خرائط جوجل، دور على العميل، حدد النقطة، وانسخ الرابط)</p>
+                    <div className="flex gap-2">
+                      <input value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://maps.google.com/..."
+                        className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <button onClick={() => saveFromLink(c.uid)} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>حفظ</button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>أو دخّل الإحداثيات يدويًا</p>
+                    <div className="flex gap-2">
+                      <input type="number" step="any" value={latInput} onChange={e => setLatInput(e.target.value)} placeholder="خط العرض (lat)"
+                        className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <input type="number" step="any" value={lngInput} onChange={e => setLngInput(e.target.value)} placeholder="خط الطول (lng)"
+                        className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <button onClick={() => saveManual(c.uid)} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>حفظ</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <Pager page={page} setPage={setPage} total={filtered.length} />
     </div>
@@ -284,9 +471,19 @@ function EmptyState({ text }) {
   );
 }
 
+function download(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function FuelTab({ records, setRecords }) {
   const [form, setForm] = useState({ plate: "", date: "", liters: "", cost: "", odometer: "" });
   const [page, setPage] = useState(1);
+  const [photoData, setPhotoData] = useState(null);
 
   const totalLiters = records.reduce((s, r) => s + Number(r.liters || 0), 0);
   const totalCost = records.reduce((s, r) => s + Number(r.cost || 0), 0);
@@ -295,14 +492,44 @@ function FuelTab({ records, setRecords }) {
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const consumptionByPlate = useMemo(() => {
+    const byPlate = {};
+    records.forEach(r => {
+      if (r.odometer) {
+        if (!byPlate[r.plate]) byPlate[r.plate] = [];
+        byPlate[r.plate].push(r);
+      }
+    });
+    return Object.entries(byPlate).map(([plate, list]) => {
+      const s = [...list].sort((a, b) => Number(a.odometer) - Number(b.odometer));
+      const distance = s.length > 1 ? Number(s[s.length - 1].odometer) - Number(s[0].odometer) : 0;
+      const liters = s.slice(1).reduce((sum, r) => sum + Number(r.liters || 0), 0);
+      const kmPerLiter = liters > 0 ? distance / liters : 0;
+      return { plate, distance, liters, kmPerLiter, fillCount: s.length };
+    }).filter(x => x.distance > 0);
+  }, [records]);
+
+  function handlePhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhotoData(reader.result);
+    reader.readAsDataURL(file);
+  }
   function addRecord() {
     if (!form.plate || !form.date || !form.liters || !form.cost) return;
-    setRecords([...records, { id: Date.now(), ...form }]);
+    setRecords([...records, { id: Date.now(), ...form, photo: photoData || null }]);
     setForm({ plate: "", date: "", liters: "", cost: "", odometer: "" });
+    setPhotoData(null);
     setPage(1);
   }
   function removeRecord(id) {
     setRecords(records.filter(r => r.id !== id));
+  }
+  function exportCsv() {
+    const header = "التاريخ,العربية,لتر,التكلفة,العداد\n";
+    const rows = sorted.map(r => `${r.date},${r.plate},${r.liters},${r.cost},${r.odometer || ""}`).join("\n");
+    download("تقرير_الوقود.csv", "\uFEFF" + header + rows);
   }
 
   return (
@@ -335,11 +562,37 @@ function FuelTab({ records, setRecords }) {
           <input type="number" placeholder="العداد (اختياري)" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
+        <div className="flex items-center gap-2 mt-2">
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer" style={{ background: C.surface2, color: C.muted, border: `1px solid ${C.border}` }}>
+            📎 ارفق صورة الريسيت (اختياري)
+            <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+          </label>
+          {photoData && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ اتحفظت</span>}
+        </div>
         <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
           <Plus size={14} /> إضافة
         </button>
       </div>
+
+      {consumptionByPlate.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>تقرير معدل الاستهلاك</h3>
+            <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ تصدير CSV</button>
+          </div>
+          <div className="space-y-2">
+            {consumptionByPlate.map(v => (
+              <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
+              </div>
+            ))}
+          </div>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* الحساب بيعتمد على قراءة العداد المدخلة يدويًا مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق</p>
+        </div>
+      )}
 
       {sorted.length === 0 ? (
         <EmptyState text="لسه مفيش عمليات تعبئة مسجلة. ضيف أول عملية من الفورم فوق." />
@@ -348,15 +601,16 @@ function FuelTab({ records, setRecords }) {
           <div className="space-y-2">
             {paged.map(r => (
               <div key={r.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: `${C.teal}22` }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${C.teal}22` }}>
                   <Fuel size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
                   <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} لتر{r.odometer ? ` · عداد ${r.odometer}` : ""}</p>
                 </div>
-                <span className="font-mono text-xs" style={{ color: C.amber }}>{r.cost} ج.م</span>
-                <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                {r.photo && <img src={r.photo} alt="ريسيت" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
+                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                   <Trash2 size={13} color={C.red} />
                 </button>
               </div>
@@ -369,14 +623,34 @@ function FuelTab({ records, setRecords }) {
   );
 }
 
-function MaintenanceTab({ records, setRecords }) {
+function MaintenanceTab({ records, setRecords, fuelRecords }) {
   const TYPES = ["صيانة دورية", "إصلاح عطل", "تغيير زيت", "إطارات", "أخرى"];
-  const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "" });
+  const OIL_INTERVAL_KM = 2000;
+  const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   const [page, setPage] = useState(1);
 
   const totalCost = records.reduce((s, r) => s + Number(r.cost || 0), 0);
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = records.filter(r => r.nextDue && r.nextDue >= today).length;
+
+  const oilAlerts = useMemo(() => {
+    const alerts = [];
+    VEHICLES.forEach(v => {
+      const plate = v.plate;
+      const fuelForPlate = fuelRecords.filter(r => r.plate === plate && r.odometer);
+      if (fuelForPlate.length === 0) return;
+      const currentOdometer = Math.max(...fuelForPlate.map(r => Number(r.odometer)));
+
+      const oilChanges = records.filter(r => r.plate === plate && r.type === "تغيير زيت" && r.odometer);
+      const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
+
+      const kmSinceOil = currentOdometer - lastOilOdometer;
+      if (kmSinceOil >= OIL_INTERVAL_KM) {
+        alerts.push({ plate, kmSinceOil, currentOdometer, lastOilOdometer });
+      }
+    });
+    return alerts.sort((a, b) => b.kmSinceOil - a.kmSinceOil);
+  }, [records, fuelRecords]);
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -384,7 +658,7 @@ function MaintenanceTab({ records, setRecords }) {
   function addRecord() {
     if (!form.plate || !form.date || !form.cost) return;
     setRecords([...records, { id: Date.now(), ...form }]);
-    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "" });
+    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
     setPage(1);
   }
   function removeRecord(id) {
@@ -400,7 +674,26 @@ function MaintenanceTab({ records, setRecords }) {
         <KpiCard icon={Wrench} value={records.length} label="عدد أعمال الصيانة" color={C.teal} />
         <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label="إجمالي التكلفة (ج.م)" color={C.red} />
         <KpiCard icon={Calendar} value={upcoming} label="صيانات مجدولة قادمة" color={C.amber} />
+        <KpiCard icon={Wrench} value={oilAlerts.length} label="عربيات محتاجة تغيير زيت" color={oilAlerts.length ? C.red : C.teal} />
       </div>
+
+      {oilAlerts.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.red }}>⚠ تنبيهات تغيير الزيت</h3>
+          <div className="space-y-2">
+            {oilAlerts.map(a => (
+              <div key={a.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface }}>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {a.plate}</span>
+                <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
+                  {a.lastOilOdometer > 0 ? `آخر تغيير زيت عند ${a.lastOilOdometer} كم` : "مفيش تغيير زيت مسجل قبل كده"}
+                </span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.red }}>{a.kmSinceOil.toFixed(0)} كم من غير تغيير</span>
+              </div>
+            ))}
+          </div>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* التنبيه بيظهر لما تعدي {OIL_INTERVAL_KM} كم من آخر تغيير زيت، بناءً على قراءة العداد المسجلة في الوقود</p>
+        </div>
+      )}
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عملية صيانة</h3>
@@ -417,6 +710,8 @@ function MaintenanceTab({ records, setRecords }) {
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="number" placeholder="العداد عند الصيانة" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" placeholder="الصيانة القادمة" value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -436,17 +731,17 @@ function MaintenanceTab({ records, setRecords }) {
           <div className="space-y-2">
             {paged.map(r => (
               <div key={r.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: `${C.amber}22` }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${C.amber}22` }}>
                   <Wrench size={14} color={C.amber} />
                 </div>
                 <div className="flex-1">
                   <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate} · {r.type}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>
-                    {r.date}{r.nextDue ? ` · القادمة ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
+                    {r.date}{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.nextDue ? ` · القادمة ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
                   </p>
                 </div>
-                <span className="font-mono text-xs" style={{ color: C.amber }}>{r.cost} ج.م</span>
-                <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                   <Trash2 size={13} color={C.red} />
                 </button>
               </div>
@@ -459,14 +754,23 @@ function MaintenanceTab({ records, setRecords }) {
   );
 }
 
-function RouteTab({ stops, setStops }) {
+function haversineKm(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const la1 = a.lat * Math.PI / 180, la2 = b.lat * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function RouteTab({ stops, setStops, customerLocations, customers }) {
   const [q, setQ] = useState("");
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
     const added = new Set(stops.map(s => s.uid));
-    return CUSTOMERS
-      .map((c, i) => ({ ...c, uid: i }))
+    return customers
+      .map(c => ({ ...c, uid: c.id }))
       .filter(c => !added.has(c.uid))
       .filter(c =>
         (c.name || "").toLowerCase().includes(q.toLowerCase()) ||
@@ -474,9 +778,10 @@ function RouteTab({ stops, setStops }) {
         (c.territory || "").toLowerCase().includes(q.toLowerCase())
       )
       .slice(0, 10);
-  }, [q, stops]);
+  }, [q, stops, customers]);
 
   const territoryCount = new Set(stops.map(s => s.territory || "غير محدد")).size;
+  const geoCount = stops.filter(s => customerLocations[s.uid]).length;
 
   function addStop(c) {
     setStops([...stops, c]);
@@ -493,14 +798,32 @@ function RouteTab({ stops, setStops }) {
     setStops(next);
   }
   function sortByLocation() {
-    const sorted = [...stops].sort((a, b) => {
+    const withGeo = stops.filter(s => customerLocations[s.uid]);
+    const withoutGeo = stops.filter(s => !customerLocations[s.uid]);
+
+    let orderedGeo = [];
+    if (withGeo.length > 0) {
+      const remaining = withGeo.map(s => ({ ...s, ...customerLocations[s.uid] }));
+      let current = remaining.shift();
+      orderedGeo.push(current);
+      while (remaining.length) {
+        let bestIdx = 0, bestDist = Infinity;
+        remaining.forEach((s, i) => {
+          const d = haversineKm(current, s);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        });
+        current = remaining.splice(bestIdx, 1)[0];
+        orderedGeo.push(current);
+      }
+    }
+    const orderedText = [...withoutGeo].sort((a, b) => {
       const t = (a.territory || "").localeCompare(b.territory || "");
       if (t !== 0) return t;
       const g = (a.governorate || "").localeCompare(b.governorate || "");
       if (g !== 0) return g;
       return String(a.city || "").localeCompare(String(b.city || ""));
     });
-    setStops(sorted);
+    setStops([...orderedGeo, ...orderedText]);
   }
   function clearRoute() {
     setStops([]);
@@ -509,11 +832,12 @@ function RouteTab({ stops, setStops }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>خط السير</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>ضيف العملاء اللي هتزورهم ورتب المحطات حسب المنطقة تلقائيًا</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>ضيف العملاء اللي هتزورهم — الترتيب بيعتمد على الموقع GPS الفعلي لو محفوظ، وبيرجع للترتيب حسب المنطقة لو مش محفوظ</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={MapPin} value={stops.length} label="عدد المحطات" color={C.teal} />
-        <KpiCard icon={Navigation} value={territoryCount} label="عدد المناطق في الرحلة" color={C.amber} />
+        <KpiCard icon={Navigation} value={geoCount} label="محطات بموقع GPS دقيق" color={C.teal} />
+        <KpiCard icon={Building2} value={territoryCount} label="عدد المناطق في الرحلة" color={C.amber} />
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -527,7 +851,7 @@ function RouteTab({ stops, setStops }) {
               <div key={c.uid} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2, border: `1px solid ${C.border}` }}>
                 <div className="flex-1">
                   <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{c.name || "بدون اسم"}</p>
-                  <p className="font-ui text-xs" style={{ color: C.muted }}>{[c.territory, c.governorate, c.city].filter(Boolean).join(" · ")}</p>
+                  <p className="font-ui text-xs" style={{ color: C.muted }}>{[c.territory, c.governorate, c.city].filter(Boolean).join(" · ")}{customerLocations[c.uid] ? " · 📍 موقع محفوظ" : ""}</p>
                 </div>
                 <button onClick={() => addStop(c)} className="p-1.5 rounded-lg" style={{ background: `${C.amber}22` }}>
                   <Plus size={14} color={C.amber} />
@@ -555,28 +879,32 @@ function RouteTab({ stops, setStops }) {
         <EmptyState text="لسه مفيش عملاء في خط السير. دور عليهم فوق وضيفهم." />
       ) : (
         <div className="space-y-2">
-          {stops.map((s, i) => (
-            <div key={s.uid} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-              <div className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>
-                {i + 1}
-              </div>
-              <div className="flex-1">
-                <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{s.name || "بدون اسم"}</p>
-                <p className="font-ui text-xs" style={{ color: C.muted }}>{[s.territory, s.governorate, s.city].filter(Boolean).join(" · ")} · {s.code}</p>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
-                  <ChevronUp size={12} color={C.muted} />
+          {stops.map((s, i) => {
+            const hasGeo = !!customerLocations[s.uid];
+            return (
+              <div key={s.uid} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{s.name || "بدون اسم"}</p>
+                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{[s.territory, s.governorate, s.city].filter(Boolean).join(" · ")} · {s.code}</p>
+                </div>
+                <span className="font-ui text-[10px] shrink-0" style={{ color: hasGeo ? C.teal : C.muted }}>{hasGeo ? "📍 دقيق" : "🗂️ تقريبي"}</span>
+                <div className="flex flex-col gap-0.5">
+                  <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
+                    <ChevronUp size={12} color={C.muted} />
+                  </button>
+                  <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
+                    <ChevronDown size={12} color={C.muted} />
+                  </button>
+                </div>
+                <button onClick={() => removeStop(s.uid)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                  <Trash2 size={13} color={C.red} />
                 </button>
-                <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
-                  <ChevronDown size={12} color={C.muted} />
-                </button>
               </div>
-              <button onClick={() => removeStop(s.uid)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
-                <Trash2 size={13} color={C.red} />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -586,7 +914,6 @@ function RouteTab({ stops, setStops }) {
 const TABS = [
   { key: "dash", label: "الرئيسية", icon: LayoutDashboard, comp: DashboardTab },
   { key: "route", label: "خط السير", icon: Navigation, comp: RouteTab },
-  { key: "trips", label: "الرحلات", icon: Route, comp: TripsTab },
   { key: "fuel", label: "الوقود", icon: Fuel, comp: FuelTab },
   { key: "maintenance", label: "الصيانة", icon: Wrench, comp: MaintenanceTab },
   { key: "vehicles", label: "الأسطول", icon: Truck, comp: VehiclesTab },
@@ -594,28 +921,73 @@ const TABS = [
   { key: "customers", label: "العملاء", icon: Building2, comp: CustomersTab },
 ];
 
-function EtronicDashboard() {
+function useFirestoreState(key, initialFn) {
+  const [state, setState] = useState(initialFn());
+  const [ready, setReady] = useState(false);
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
+
+  React.useEffect(() => {
+    const ref = db.collection("etronic_data").doc(key);
+    const unsub = ref.onSnapshot(
+      (snap) => {
+        if (snap.exists) {
+          setState(snap.data().value);
+        } else {
+          ref.set({ value: initialFn() }).catch(() => {});
+        }
+        setReady(true);
+      },
+      () => setReady(true)
+    );
+    return unsub;
+  }, [key]);
+
+  function setAndSync(updater) {
+    const next = typeof updater === "function" ? updater(stateRef.current) : updater;
+    setState(next);
+    db.collection("etronic_data").doc(key).set({ value: next }).catch(() => {});
+  }
+
+  return [state, setAndSync, ready];
+}
+
+function EtronicDashboard({ user, isAdmin }) {
   const [tab, setTab] = useState("dash");
-  const [fuelRecords, setFuelRecords] = useState([]);
-  const [maintenanceRecords, setMaintenanceRecords] = useState([]);
+  const [fuelRecords, setFuelRecords] = useFirestoreState("etronic_fuel", () => []);
+  const [maintenanceRecords, setMaintenanceRecords] = useFirestoreState("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
-  const activeTabDef = TABS.find(t => t.key === tab);
+  const [customers, setCustomers] = useFirestoreState("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
+  const [employees, setEmployees] = useFirestoreState("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
+  const [customerLocations, setCustomerLocations] = useFirestoreState("etronic_customer_locations", () => ({}));
+  const [accounts, setAccounts] = useFirestoreState("etronic_accounts", () => []);
+
+  const visibleTabs = isAdmin ? [...TABS, { key: "admin", label: "الإدارة", icon: Users, comp: AdminTab }] : TABS;
+  const activeTabDef = visibleTabs.find(t => t.key === tab) || visibleTabs[0];
   const Active = activeTabDef.comp;
 
   const extraProps = tab === "fuel"
     ? { records: fuelRecords, setRecords: setFuelRecords }
     : tab === "maintenance"
-      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords }
+      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops }
-        : {};
+        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers }
+        : tab === "customers"
+          ? { customers, setCustomers, customerLocations, setCustomerLocations }
+          : tab === "employees"
+            ? { employees, setEmployees }
+            : tab === "admin"
+              ? { accounts, setAccounts, currentUser: user }
+            : tab === "dash"
+              ? { customersCount: customers.length, employeesCount: employees.length }
+              : {};
 
   return (
     <div dir="rtl" className="font-ui min-h-screen flex" style={{ background: C.bg }}>
       <style>{FONTS}</style>
       <aside className="w-56 shrink-0 p-4 hidden md:flex flex-col gap-1" style={{ background: C.surface, borderLeft: `1px solid ${C.border}` }}>
         <p className="font-ui font-extrabold text-lg mb-6 px-2" style={{ color: C.amber }}>Etronic Fleet</p>
-        {TABS.map(t => {
+        {visibleTabs.map(t => {
           const Icon = t.icon; const active = tab === t.key;
           return (
             <button key={t.key} onClick={() => setTab(t.key)}
@@ -625,19 +997,30 @@ function EtronicDashboard() {
             </button>
           );
         })}
+        <div className="flex-1" />
+        <div className="px-2 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+          <p className="font-ui text-[11px] truncate mb-2" style={{ color: C.muted }}>{user.email}</p>
+          <button onClick={() => auth.signOut()} className="w-full text-right font-ui text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: `${C.red}18`, color: C.red }}>
+            تسجيل الخروج
+          </button>
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col">
-        <div className="flex md:hidden items-center justify-around p-2" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
-          {TABS.map(t => {
+        <div className="flex md:hidden items-center justify-around p-2 overflow-x-auto" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
+          {visibleTabs.map(t => {
             const Icon = t.icon; const active = tab === t.key;
             return (
-              <button key={t.key} onClick={() => setTab(t.key)} className="flex flex-col items-center gap-1 p-1">
+              <button key={t.key} onClick={() => setTab(t.key)} className="flex flex-col items-center gap-1 p-1 shrink-0">
                 <Icon size={18} color={active ? C.amber : C.muted} />
                 <span className="text-[9px]" style={{ color: active ? C.amber : C.muted }}>{t.label}</span>
               </button>
             );
           })}
+          <button onClick={() => auth.signOut()} className="flex flex-col items-center gap-1 p-1 shrink-0">
+            <Trash2 size={18} color={C.red} />
+            <span className="text-[9px]" style={{ color: C.red }}>خروج</span>
+          </button>
         </div>
         <main className="p-6 overflow-y-auto">
           <Active {...extraProps} />
@@ -647,8 +1030,192 @@ function EtronicDashboard() {
   );
 }
 
+function LoginScreen({ errorMsg }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(errorMsg || "");
+  const [loading, setLoading] = useState(false);
+
+  function handleLogin() {
+    if (!email || !password) return;
+    setError(""); setLoading(true);
+    auth.signInWithEmailAndPassword(email.trim(), password)
+      .catch(err => setError("مقدرناش نسجل دخولك: " + err.message))
+      .finally(() => setLoading(false));
+  }
+
+  return (
+    <div dir="rtl" className="font-ui min-h-screen flex items-center justify-center p-6" style={{ background: C.bg }}>
+      <style>{FONTS}</style>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <p className="font-ui font-extrabold text-xl mb-1 text-center" style={{ color: C.amber }}>Etronic Fleet</p>
+        <p className="font-ui text-xs mb-6 text-center" style={{ color: C.muted }}>سجل دخولك عشان تستخدم النظام</p>
+        <div className="space-y-3">
+          <input type="email" placeholder="الإيميل" value={email} onChange={e => setEmail(e.target.value)}
+            className="w-full rounded-lg px-3 py-2.5 font-ui text-sm outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="password" placeholder="كلمة المرور" value={password} onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            className="w-full rounded-lg px-3 py-2.5 font-ui text-sm outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          {error && <p className="font-ui text-xs" style={{ color: C.red }}>{error}</p>}
+          <button onClick={handleLogin} disabled={loading}
+            className="w-full py-2.5 rounded-lg font-ui text-sm font-bold disabled:opacity-50" style={{ background: C.amber, color: "#0B0E13" }}>
+            {loading ? "بيدخل..." : "تسجيل الدخول"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminTab({ accounts, setAccounts, currentUser }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [creating, setCreating] = useState(false);
+  const [err, setErr] = useState("");
+
+  function createAccount() {
+    if (!form.name || !form.email || !form.password) return;
+    if (form.password.length < 6) { setErr("كلمة المرور لازم تكون 6 حروف/أرقام على الأقل"); return; }
+    setErr(""); setCreating(true);
+    secondaryAuth.createUserWithEmailAndPassword(form.email.trim(), form.password)
+      .then(() => {
+        secondaryAuth.signOut();
+        setAccounts([...accounts, { email: form.email.trim(), name: form.name, role: "employee", active: true }]);
+        setForm({ name: "", email: "", password: "" });
+      })
+      .catch(e => setErr("مقدرناش ننشئ الحساب: " + e.message))
+      .finally(() => setCreating(false));
+  }
+  function toggleActive(email) {
+    setAccounts(accounts.map(a => a.email === email ? { ...a, active: !a.active } : a));
+  }
+
+  return (
+    <div>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>إدارة الحسابات</h2>
+
+      <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إنشاء حساب موظف جديد</h3>
+        <div className="grid grid-cols-1 gap-2">
+          <input placeholder="اسم الموظف" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="email" placeholder="الإيميل" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="text" placeholder="كلمة مرور مؤقتة (6 حروف على الأقل)" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        {err && <p className="font-ui text-xs mt-2" style={{ color: C.red }}>{err}</p>}
+        <button onClick={createAccount} disabled={creating} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
+          style={{ background: `${C.amber}22`, color: C.amber }}>
+          <Plus size={14} /> {creating ? "بينشئ الحساب..." : "إنشاء حساب"}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {accounts.map(a => (
+          <div key={a.email} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: a.active ? `${C.teal}22` : `${C.red}18` }}>
+              <Users size={14} color={a.active ? C.teal : C.red} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{a.name} {a.role === "admin" ? "(أدمن)" : ""}</p>
+              <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{a.email}</p>
+            </div>
+            {a.email !== currentUser.email && (
+              <button onClick={() => toggleActive(a.email)}
+                className="px-3 py-1.5 rounded-lg font-ui text-[11px] font-semibold shrink-0"
+                style={{ background: a.active ? `${C.red}18` : `${C.teal}22`, color: a.active ? C.red : C.teal }}>
+                {a.active ? "إيقاف الحساب" : "تفعيل الحساب"}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>* "إيقاف الحساب" بيمنع الموظف من الدخول للنظام فورًا، لكن مش بيحذف حساب تسجيل الدخول بتاعه نهائيًا (ده محتاج إعداد إضافي في السيرفر). لو عايز حذف نهائي كلمني.</p>
+    </div>
+  );
+}
+
+function AuthGate() {
+  const [user, setUser] = useState(undefined);
+  const [accountStatus, setAccountStatus] = useState(undefined);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  React.useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => setUser(u));
+    return unsub;
+  }, []);
+
+  React.useEffect(() => {
+    if (!user) { setAccountStatus(undefined); return; }
+    const ref = db.collection("etronic_data").doc("etronic_accounts");
+    const unsub = ref.onSnapshot(snap => {
+      const list = snap.exists ? (snap.data().value || []) : [];
+      if (list.length === 0) {
+        const bootstrapped = [{ email: user.email, name: user.email, role: "admin", active: true }];
+        ref.set({ value: bootstrapped });
+        setAccountStatus({ role: "admin", active: true });
+        return;
+      }
+      const mine = list.find(a => a.email === user.email);
+      if (!mine) {
+        setErrorMsg("الحساب ده مش مسجل في النظام. كلم الأدمن يضيفك.");
+        auth.signOut();
+        return;
+      }
+      if (!mine.active) {
+        setErrorMsg("حسابك متوقف حاليًا. كلم الأدمن.");
+        auth.signOut();
+        return;
+      }
+      setAccountStatus(mine);
+    });
+    return unsub;
+  }, [user]);
+
+  if (user === undefined || (user && accountStatus === undefined)) {
+    return (
+      <div dir="rtl" className="font-ui min-h-screen flex items-center justify-center" style={{ background: C.bg }}>
+        <style>{FONTS}</style>
+        <p className="font-ui text-sm" style={{ color: C.muted }}>بيحمّل...</p>
+      </div>
+    );
+  }
+  if (!user) return <LoginScreen errorMsg={errorMsg} />;
+  return <EtronicDashboard user={user} isAdmin={accountStatus.role === "admin"} />;
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div dir="rtl" style={{ background: "#12151B", color: "#E15D44", minHeight: "100vh", padding: 24, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap" }}>
+          حصل خطأ في التطبيق:
+          {"\n\n"}{String((this.state.error && this.state.error.message) || this.state.error)}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function FirebaseErrorScreen({ error }) {
+  return (
+    <div dir="rtl" style={{ background: "#12151B", color: "#E15D44", minHeight: "100vh", padding: 24, fontFamily: "monospace", fontSize: 13, whiteSpace: "pre-wrap" }}>
+      مقدرناش نوصل Firebase:
+      {"\n\n"}{String((error && error.message) || error)}
+      {"\n\n"}لو فاتح الملف مباشرة من جهازك (file://) جرب افتحه من رابط الموقع المنشور بدل كده.
+    </div>
+  );
+}
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<EtronicDashboard />);
+if (firebaseInitError) {
+  root.render(<FirebaseErrorScreen error={firebaseInitError} />);
+} else {
+  root.render(<ErrorBoundary><AuthGate /></ErrorBoundary>);
+}
 
 </script>
 <script>
