@@ -297,6 +297,25 @@ function parseMapsLink(text) {
   return null;
 }
 
+async function resolveMapsLink(text) {
+  if (!text) return null;
+  const direct = parseMapsLink(text);
+  if (direct) return direct;
+  // Shortened links (maps.app.goo.gl, goo.gl) don't contain coordinates in the URL itself —
+  // we need to follow the redirect to get the real Google Maps URL, then parse that.
+  if (!/goo\.gl/i.test(text)) return null;
+  try {
+    const proxied = `https://api.allorigins.win/get?url=${encodeURIComponent(text)}`;
+    const res = await fetch(proxied);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const finalUrl = (data && data.status && data.status.url) || "";
+    return parseMapsLink(finalUrl) || parseMapsLink((data && data.contents) || "");
+  } catch (e) {
+    return null;
+  }
+}
+
 function openInGoogleMaps(loc, fallbackParts) {
   const q = loc
     ? `${loc.lat},${loc.lng}`
@@ -310,6 +329,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
   const [savingUid, setSavingUid] = useState(null);
   const [editUid, setEditUid] = useState(null);
   const [linkInput, setLinkInput] = useState("");
+  const [resolvingLink, setResolvingLink] = useState(false);
   const [latInput, setLatInput] = useState("");
   const [lngInput, setLngInput] = useState("");
   const [form, setForm] = useState({ name: "", code: "", territory: "", governorate: "", city: "" });
@@ -369,8 +389,10 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
     setLatInput(loc ? String(loc.lat) : "");
     setLngInput(loc ? String(loc.lng) : "");
   }
-  function saveFromLink(uid) {
-    const parsed = parseMapsLink(linkInput.trim());
+  async function saveFromLink(uid) {
+    setResolvingLink(true);
+    const parsed = await resolveMapsLink(linkInput.trim());
+    setResolvingLink(false);
     if (!parsed) {
       alert("مقدرناش نلاقي إحداثيات في الرابط ده. جرب تنسخ الرابط تاني من Google Maps بعد ما تحدد نقطة على الخريطة، أو استخدم الإدخال اليدوي تحت");
       return;
@@ -464,7 +486,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
                     <div className="flex gap-2">
                       <input value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://maps.google.com/..."
                         className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                      <button onClick={() => saveFromLink(c.uid)} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>حفظ</button>
+                      <button onClick={() => saveFromLink(c.uid)} disabled={resolvingLink} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0 disabled:opacity-50" style={{ background: `${C.amber}22`, color: C.amber }}>{resolvingLink ? "بيتحقق..." : "حفظ"}</button>
                     </div>
                   </div>
 
