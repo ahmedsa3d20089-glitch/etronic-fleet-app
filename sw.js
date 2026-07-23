@@ -1,4 +1,4 @@
-const CACHE_NAME = "etronic-fleet-v1";
+const CACHE_NAME = "etronic-fleet-v2";
 const CORE_ASSETS = [
   "./index.html",
   "./manifest.json",
@@ -34,19 +34,20 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first: always try to get the latest version from the server first.
+// Only fall back to the cached copy if the network request fails (e.g. offline).
+// This means updates (like new logos, permissions, etc.) show up immediately
+// on the very next load, instead of waiting for a second reload.
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
