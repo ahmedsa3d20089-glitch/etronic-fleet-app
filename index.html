@@ -655,6 +655,12 @@ async function ocrReceipt(base64) {
     })
   });
   const data = await res.json();
+  if (data?.responses?.[0]?.error) {
+    throw new Error(data.responses[0].error.message || "خطأ من خدمة القراءة");
+  }
+  if (data?.error) {
+    throw new Error(data.error.message || "خطأ من خدمة القراءة");
+  }
   const text = data?.responses?.[0]?.fullTextAnnotation?.text || "";
   return text;
 }
@@ -1030,6 +1036,34 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// Nearest-neighbor construction can leave "zigzag" crossings. 2-opt fixes those by
+// repeatedly reversing segments whenever that shortens the total path, keeping the
+// starting stop (index 0) fixed in place.
+function twoOptImprove(points) {
+  if (points.length < 4) return points;
+  let route = [...points];
+  let improved = true;
+  let iterations = 0;
+  while (improved && iterations < 300) {
+    improved = false;
+    iterations++;
+    for (let i = 0; i < route.length - 2; i++) {
+      for (let j = i + 2; j < route.length; j++) {
+        const a = route[i], b = route[i + 1], c = route[j];
+        const dNext = j + 1 < route.length ? route[j + 1] : null;
+        const before = haversineKm(a, b) + (dNext ? haversineKm(c, dNext) : 0);
+        const after = haversineKm(a, c) + (dNext ? haversineKm(b, dNext) : 0);
+        if (after < before - 1e-6) {
+          const seg = route.slice(i + 1, j + 1).reverse();
+          route = [...route.slice(0, i + 1), ...seg, ...route.slice(j + 1)];
+          improved = true;
+        }
+      }
+    }
+  }
+  return route;
+}
+
 function RouteTab({ stops, setStops, customerLocations, customers }) {
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
@@ -1094,6 +1128,7 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
         current = remaining.splice(bestIdx, 1)[0];
         orderedGeo.push(current);
       }
+      orderedGeo = twoOptImprove(orderedGeo);
     }
     const orderedText = [...withoutGeo].sort((a, b) => {
       const t = (a.territory || "").localeCompare(b.territory || "");
@@ -1109,7 +1144,11 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
     setSorting(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => { runSort({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setSorting(false); },
-      () => { runSort(null); setSorting(false); },
+      () => {
+        alert("مقدرناش نحدد موقعك الحالي (لازم تسمح بالوصول للموقع)، هيتم الترتيب حسب أقرب مسافة بين العملاء نفسهم بدل ما يبدأ من موقعك");
+        runSort(null);
+        setSorting(false);
+      },
       { enableHighAccuracy: true, timeout: 12000 }
     );
   }
