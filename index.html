@@ -131,7 +131,48 @@ function KpiCard({ icon: Icon, value, label, color }) {
   );
 }
 
-function DashboardTab({ customersCount, employeesCount, vehiclesCount }) {
+const FRAUD_THRESHOLD_KM_PER_L = 4.5;
+
+function computeConsumptionByPlate(fuelRecords) {
+  const byPlate = {};
+  fuelRecords.forEach(r => {
+    if (r.odometer) {
+      if (!byPlate[r.plate]) byPlate[r.plate] = [];
+      byPlate[r.plate].push(r);
+    }
+  });
+  return Object.entries(byPlate).map(([plate, list]) => {
+    const s = [...list].sort((a, b) => Number(a.odometer) - Number(b.odometer));
+    const distance = s.length > 1 ? Number(s[s.length - 1].odometer) - Number(s[0].odometer) : 0;
+    const liters = s.slice(1).reduce((sum, r) => sum + Number(r.liters || 0), 0);
+    const kmPerLiter = liters > 0 ? distance / liters : 0;
+    return { plate, distance, liters, kmPerLiter, fillCount: s.length };
+  }).filter(x => x.distance > 0);
+}
+
+function BarChart({ data, unit }) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  return (
+    <div className="space-y-2">
+      {data.map(d => (
+        <div key={d.label} className="flex items-center gap-2">
+          <span className="font-mono text-[11px] w-16 shrink-0 text-right" style={{ color: C.muted }}>{d.label}</span>
+          <div className="flex-1 rounded-full overflow-hidden" style={{ background: C.surface2, height: 14 }}>
+            <div style={{ width: `${(d.value / max) * 100}%`, height: "100%", background: d.color || C.teal, borderRadius: 999 }} />
+          </div>
+          <span className="font-mono text-[11px] w-16 shrink-0" style={{ color: d.color || C.text }}>{d.value.toFixed(2)}{unit || ""}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords }) {
+  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords || []), [fuelRecords]);
+  const chartData = consumptionByPlate
+    .sort((a, b) => b.kmPerLiter - a.kmPerLiter)
+    .map(v => ({ label: v.plate, value: v.kmPerLiter, color: v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L ? C.red : C.teal }));
+
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>لوحة التحكم</h2>
@@ -141,6 +182,18 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount }) {
         <KpiCard icon={Building2} value={customersCount} label="عدد العملاء في قاعدة البيانات" color={C.teal} />
         <KpiCard icon={Users} value={employeesCount} label="عدد الموظفين" color={C.amber} />
         <KpiCard icon={Truck} value={vehiclesCount} label="عدد العربيات النشطة" color={C.teal} />
+      </div>
+
+      <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل عربية (كم/لتر)</h3>
+        {chartData.length === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+        ) : (
+          <>
+            <BarChart data={chartData} unit=" كم/لتر" />
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>* الشريط الأحمر معناه المعدل أقل من {FRAUD_THRESHOLD_KM_PER_L} كم/لتر — ممكن يكون فيه تلاعب في الوقود</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -743,10 +796,14 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عملية تعبئة</h3>
 
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-            📷 صوّر / ارفق الريسيت
+            📷 صوّر الريسيت
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+          </label>
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+            🖼️ اختر من الصور
+            <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
           </label>
           {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>بيقرا الصورة...</span>}
           {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ الصورة اتحفظت</span>}
@@ -784,15 +841,18 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
             <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ تصدير CSV</button>
           </div>
           <div className="space-y-2">
-            {consumptionByPlate.map(v => (
-              <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
-                <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
-              </div>
-            ))}
+            {consumptionByPlate.map(v => {
+              const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+              return (
+                <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
+                </div>
+              );
+            })}
           </div>
-          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* الحساب بيعتمد على قراءة العداد المدخلة مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق</p>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* الحساب بيعتمد على قراءة العداد المدخلة مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق. المعدل الأقل من {FRAUD_THRESHOLD_KM_PER_L} كم/لتر بيتلون بالأحمر كتنبيه لاحتمال تلاعب في الوقود</p>
         </div>
       )}
 
@@ -827,7 +887,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
   );
 }
 
-function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
+function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLogs, isAdmin }) {
   const TYPES = ["صيانة دورية", "إصلاح عطل", "تغيير زيت", "إطارات", "أخرى"];
   const OIL_INTERVAL_KM = 2000;
   const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
@@ -839,11 +899,12 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
 
   const oilAlerts = useMemo(() => {
     const alerts = [];
+    const logs = odometerLogs || [];
     vehicles.forEach(v => {
       const plate = v.plate;
-      const fuelForPlate = fuelRecords.filter(r => r.plate === plate && r.odometer);
-      if (fuelForPlate.length === 0) return;
-      const currentOdometer = Math.max(...fuelForPlate.map(r => Number(r.odometer)));
+      const logsForPlate = logs.filter(l => l.plate === plate && l.odometer);
+      if (logsForPlate.length === 0) return;
+      const currentOdometer = Math.max(...logsForPlate.map(l => Number(l.odometer)));
 
       const oilChanges = records.filter(r => r.plate === plate && r.type === "تغيير زيت" && r.odometer);
       const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
@@ -854,7 +915,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
       }
     });
     return alerts.sort((a, b) => b.kmSinceOil - a.kmSinceOil);
-  }, [records, fuelRecords]);
+  }, [records, odometerLogs, vehicles]);
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -895,7 +956,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
               </div>
             ))}
           </div>
-          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* التنبيه بيظهر لما تعدي {OIL_INTERVAL_KM} كم من آخر تغيير زيت، بناءً على قراءة العداد المسجلة في الوقود</p>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* التنبيه بيظهر لما تعدي {OIL_INTERVAL_KM} كم من آخر تغيير زيت، بناءً على قراءة العداد المسجلة في تاب "قراءة العداد"</p>
         </div>
       )}
 
@@ -945,9 +1006,11 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
                   </p>
                 </div>
                 <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
-                <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
-                  <Trash2 size={13} color={C.red} />
-                </button>
+                {(r.type !== "تغيير زيت" || isAdmin) && (
+                  <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
+                    <Trash2 size={13} color={C.red} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -969,6 +1032,7 @@ function haversineKm(a, b) {
 
 function RouteTab({ stops, setStops, customerLocations, customers }) {
   const [q, setQ] = useState("");
+  const [sorting, setSorting] = useState(false);
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
@@ -1001,14 +1065,25 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
     [next[index], next[j]] = [next[j], next[index]];
     setStops(next);
   }
-  function sortByLocation() {
+  function runSort(startPoint) {
     const withGeo = stops.filter(s => customerLocations[s.uid]);
     const withoutGeo = stops.filter(s => !customerLocations[s.uid]);
 
     let orderedGeo = [];
     if (withGeo.length > 0) {
       const remaining = withGeo.map(s => ({ ...s, ...customerLocations[s.uid] }));
-      let current = remaining.shift();
+      let current;
+      if (startPoint) {
+        // Start from whichever stop is nearest to the user's actual current location
+        let bestIdx = 0, bestDist = Infinity;
+        remaining.forEach((s, i) => {
+          const d = haversineKm(startPoint, s);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        });
+        current = remaining.splice(bestIdx, 1)[0];
+      } else {
+        current = remaining.shift();
+      }
       orderedGeo.push(current);
       while (remaining.length) {
         let bestIdx = 0, bestDist = Infinity;
@@ -1028,6 +1103,15 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
       return String(a.city || "").localeCompare(String(b.city || ""));
     });
     setStops([...orderedGeo, ...orderedText]);
+  }
+  function sortByLocation() {
+    if (!navigator.geolocation) { runSort(null); return; }
+    setSorting(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { runSort({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setSorting(false); },
+      () => { runSort(null); setSorting(false); },
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
   }
   function clearRoute() {
     setStops([]);
@@ -1068,9 +1152,9 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
 
       {stops.length > 0 && (
         <div className="flex items-center gap-2 mb-4">
-          <button onClick={sortByLocation} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+          <button onClick={sortByLocation} disabled={sorting} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
             style={{ background: `${C.teal}22`, color: C.teal }}>
-            <Navigation size={14} /> رتب حسب الموقع
+            <Navigation size={14} /> {sorting ? "بيحدد موقعك دلوقتي..." : "رتب حسب الموقع"}
           </button>
           <button onClick={clearRoute} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.red}18`, color: C.red }}>
@@ -1117,17 +1201,58 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
   );
 }
 
-function OdometerTab({ logs, setLogs, vehicles }) {
+function parseOdometerText(text) {
+  if (!text) return "";
+  // Prefer a number explicitly near "km"/"كم" markers
+  let m = text.match(/(?:km|كم)\D{0,5}(\d{3,7})/i);
+  if (m) return m[1];
+  // Otherwise take the longest standalone digit run (odometers are usually the biggest number on the dash)
+  const nums = [...text.matchAll(/\d{3,7}/g)].map(x => x[0]);
+  if (!nums.length) return "";
+  return nums.sort((a, b) => b.length - a.length)[0];
+}
+
+function OdometerTab({ logs, setLogs, vehicles, currentUser }) {
   const [form, setForm] = useState({ plate: "", date: "", odometer: "" });
   const [page, setPage] = useState(1);
+  const [photoData, setPhotoData] = useState(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState("");
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  async function handlePhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhotoData(reader.result);
+    reader.readAsDataURL(file);
+
+    setScanning(true);
+    setScanNote("");
+    try {
+      const base64 = await fileToBase64(file);
+      const text = await ocrReceipt(base64);
+      const odometer = parseOdometerText(text);
+      if (odometer) {
+        setForm(prev => ({ ...prev, odometer }));
+        setScanNote("✓ اتقرت القراءة من الصورة — راجعها قبل ما تضيف");
+      } else {
+        setScanNote("مقدرناش نقرا رقم العداد من الصورة، دخّله يدويًا");
+      }
+    } catch (err) {
+      setScanNote("حصل خطأ في القراءة الأوتوماتيكية: " + err.message);
+    } finally {
+      setScanning(false);
+    }
+  }
   function addLog() {
     if (!form.plate || !form.date || !form.odometer) return;
-    setLogs([...logs, { id: Date.now(), ...form }]);
+    setLogs([...logs, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", odometer: "" });
+    setPhotoData(null);
+    setScanNote("");
     setPage(1);
   }
   function removeLog(id) {
@@ -1141,6 +1266,21 @@ function OdometerTab({ logs, setLogs, vehicles }) {
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة قراءة</h3>
+
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
+            📷 صوّر العداد
+            <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+          </label>
+          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+            🖼️ اختر من الصور
+            <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+          </label>
+          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>بيقرا الصورة...</span>}
+          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ الصورة اتحفظت</span>}
+        </div>
+        {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
+
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
@@ -1152,6 +1292,7 @@ function OdometerTab({ logs, setLogs, vehicles }) {
           <input type="number" placeholder="قراءة العداد" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>هيتسجل باسم المستخدم: {currentUser?.email}</p>
         <button onClick={addLog} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
           <Plus size={14} /> إضافة
@@ -1170,8 +1311,9 @@ function OdometerTab({ logs, setLogs, vehicles }) {
                 </div>
                 <div className="flex-1">
                   <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {l.plate}</p>
-                  <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}</p>
+                  <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}{l.enteredBy ? ` · بواسطة ${l.enteredBy}` : ""}</p>
                 </div>
+                {l.photo && <img src={l.photo} alt="عداد" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
                 <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} كم</span>
                 <button onClick={() => removeLog(l.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                   <Trash2 size={13} color={C.red} />
@@ -1186,25 +1328,41 @@ function OdometerTab({ logs, setLogs, vehicles }) {
   );
 }
 
-function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
-  const consumptionByPlate = useMemo(() => {
-    const byPlate = {};
-    fuelRecords.forEach(r => {
-      if (r.odometer) {
-        if (!byPlate[r.plate]) byPlate[r.plate] = [];
-        byPlate[r.plate].push(r);
-      }
-    });
-    return Object.entries(byPlate).map(([plate, list]) => {
-      const s = [...list].sort((a, b) => Number(a.odometer) - Number(b.odometer));
-      const distance = s.length > 1 ? Number(s[s.length - 1].odometer) - Number(s[0].odometer) : 0;
-      const liters = s.slice(1).reduce((sum, r) => sum + Number(r.liters || 0), 0);
-      const kmPerLiter = liters > 0 ? distance / liters : 0;
-      return { plate, distance, liters, kmPerLiter };
-    }).filter(x => x.distance > 0);
-  }, [fuelRecords]);
+function computePerFillConsumption(fuelRecords) {
+  const byPlate = {};
+  fuelRecords.forEach(r => {
+    if (r.odometer) {
+      if (!byPlate[r.plate]) byPlate[r.plate] = [];
+      byPlate[r.plate].push(r);
+    }
+  });
+  const rows = [];
+  Object.entries(byPlate).forEach(([plate, list]) => {
+    const s = [...list].sort((a, b) => (a.date || "").localeCompare(b.date || "") || Number(a.odometer) - Number(b.odometer));
+    for (let i = 1; i < s.length; i++) {
+      const km = Number(s[i].odometer) - Number(s[i - 1].odometer);
+      const liters = Number(s[i].liters || 0);
+      const kmPerLiter = liters > 0 ? km / liters : 0;
+      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter });
+    }
+  });
+  return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
 
-  const dailyByPlate = useMemo(() => {
+function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
+  const [fuelFrom, setFuelFrom] = useState("");
+  const [fuelTo, setFuelTo] = useState("");
+  const [kmFrom, setKmFrom] = useState("");
+  const [kmTo, setKmTo] = useState("");
+
+  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords), [fuelRecords]);
+
+  const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
+  const perFill = useMemo(() => perFillAll.filter(r =>
+    (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo)
+  ), [perFillAll, fuelFrom, fuelTo]);
+
+  const dailyByPlateAll = useMemo(() => {
     const byPlate = {};
     odometerLogs.forEach(l => {
       if (!byPlate[l.plate]) byPlate[l.plate] = [];
@@ -1224,10 +1382,19 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
     return rows.sort((a, b) => b.to.localeCompare(a.to));
   }, [odometerLogs]);
 
+  const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
+    (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
+  ), [dailyByPlateAll, kmFrom, kmTo]);
+
   function exportConsumptionCsv() {
     const header = "العربية,الكيلومترات,اللترات,كم/لتر\n";
     const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)}`).join("\n");
     download("تقرير_استهلاك_الوقود.csv", "\uFEFF" + header + rows);
+  }
+  function exportPerFillCsv() {
+    const header = "العربية,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
+    const rows = perFill.map(r => `${r.plate},${r.date},${r.prevOdometer},${r.odometer},${r.km},${r.liters},${r.kmPerLiter.toFixed(2)}`).join("\n");
+    download("تقرير_كل_تعبئة_وقود.csv", "\uFEFF" + header + rows);
   }
   function exportDailyCsv() {
     const header = "العربية,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n";
@@ -1240,6 +1407,14 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
       ["العربية", "الكيلومترات", "اللترات", "كم/لتر"],
       consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2)]),
       "تقرير_استهلاك_الوقود.pdf"
+    );
+  }
+  function exportPerFillPdf() {
+    exportTableToPdf(
+      "تقرير كل تعبئة وقود لوحدها",
+      ["العربية", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
+      perFill.map(r => [r.plate, r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
+      "تقرير_كل_تعبئة_وقود.pdf"
     );
   }
   function exportDailyPdf() {
@@ -1258,7 +1433,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>معدل استهلاك الوقود</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>معدل استهلاك الوقود (إجمالي لكل عربية)</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportConsumptionCsv} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportConsumptionPdf} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
@@ -1268,27 +1443,68 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
           <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
         ) : (
           <div className="space-y-2">
-            {consumptionByPlate.map(v => (
-              <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
-                <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
-              </div>
-            ))}
+            {consumptionByPlate.map(v => {
+              const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+              return (
+                <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>كل تعبئة وقود لوحدها</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={exportPerFillCsv} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+            <button onClick={exportPerFillPdf} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mb-3">
+          <input type="date" value={fuelFrom} onChange={e => setFuelFrom(e.target.value)} placeholder="من تاريخ"
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="date" value={fuelTo} onChange={e => setFuelTo(e.target.value)} placeholder="إلى تاريخ"
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        {perFill.length === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+        ) : (
+          <div className="space-y-2">
+            {perFill.map((r, i) => {
+              const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+              return (
+                <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {r.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date} · {r.km} كم · {r.liters} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} كم/لتر</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>الكيلومترات اليومية</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportDailyCsv} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportDailyPdf} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
+        <div className="flex items-center gap-2 mb-3">
+          <input type="date" value={kmFrom} onChange={e => setKmFrom(e.target.value)} placeholder="من تاريخ"
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="date" value={kmTo} onChange={e => setKmTo(e.target.value)} placeholder="إلى تاريخ"
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
         {dailyByPlate.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية لسه — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"</p>
         ) : (
           <div className="space-y-2">
             {dailyByPlate.map((r, i) => (
@@ -1402,7 +1618,7 @@ function EtronicDashboard({ user, isAdmin }) {
   const extraProps = tab === "fuel"
     ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees, isAdmin }
     : tab === "maintenance"
-      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles }
+      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin }
       : tab === "route"
         ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers }
         : tab === "customers"
@@ -1412,7 +1628,7 @@ function EtronicDashboard({ user, isAdmin }) {
             : tab === "vehicles"
               ? { vehicles, setVehicles, isAdmin }
               : tab === "odometer"
-                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles }
+                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user }
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles }
                   : tab === "settings"
@@ -1420,7 +1636,7 @@ function EtronicDashboard({ user, isAdmin }) {
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user }
                       : tab === "dash"
-                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length }
+                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords }
                         : {};
 
   return (
