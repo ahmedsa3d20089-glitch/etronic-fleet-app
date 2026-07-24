@@ -1693,7 +1693,7 @@ function useFirestoreState(key, initialFn) {
   return [state, setAndSync, ready];
 }
 
-function EtronicDashboard({ user, isAdmin }) {
+function EtronicDashboard({ user, isAdmin, permissions }) {
   const [tab, setTab] = useState("dash");
   const [fuelRecords, setFuelRecords] = useFirestoreState("etronic_fuel", () => []);
   const [maintenanceRecords, setMaintenanceRecords] = useFirestoreState("etronic_maintenance", () => []);
@@ -1705,8 +1705,10 @@ function EtronicDashboard({ user, isAdmin }) {
   const [customerLocations, setCustomerLocations] = useFirestoreState("etronic_customer_locations", () => ({}));
   const [accounts, setAccounts] = useFirestoreState("etronic_accounts", () => []);
 
-  const BASE_USER_TABS = TABS.filter(t => !["reports", "vehicles", "employees", "customers"].includes(t.key));
-  const visibleTabs = isAdmin ? [...TABS, { key: "admin", label: "الإدارة", icon: Users, comp: AdminTab }] : BASE_USER_TABS;
+  const RESTRICTED_KEYS = ["reports", "vehicles", "employees", "customers"];
+  const BASE_USER_TABS = TABS.filter(t => !RESTRICTED_KEYS.includes(t.key));
+  const grantedTabs = TABS.filter(t => RESTRICTED_KEYS.includes(t.key) && (permissions || []).includes(t.key));
+  const visibleTabs = isAdmin ? [...TABS, { key: "admin", label: "الإدارة", icon: Users, comp: AdminTab }] : [...BASE_USER_TABS, ...grantedTabs];
   const activeTabDef = visibleTabs.find(t => t.key === tab) || visibleTabs[0];
   const Active = activeTabDef.comp;
 
@@ -1819,10 +1821,24 @@ function LoginScreen({ errorMsg }) {
   );
 }
 
+const PERMISSION_OPTIONS = [
+  { key: "reports", label: "التقارير" },
+  { key: "vehicles", label: "الأسطول" },
+  { key: "employees", label: "الموظفين" },
+  { key: "customers", label: "العملاء" },
+];
+
 function AdminTab({ accounts, setAccounts, currentUser }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState("");
+
+  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [pwErr, setPwErr] = useState("");
+  const [pwSuccess, setPwSuccess] = useState("");
+  const [changingPw, setChangingPw] = useState(false);
+
+  const [expandedEmail, setExpandedEmail] = useState(null);
 
   function createAccount() {
     if (!form.name || !form.email || !form.password) return;
@@ -1831,7 +1847,7 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
     secondaryAuth.createUserWithEmailAndPassword(form.email.trim(), form.password)
       .then(() => {
         secondaryAuth.signOut();
-        setAccounts([...accounts, { email: form.email.trim(), name: form.name, role: "employee", active: true }]);
+        setAccounts([...accounts, { email: form.email.trim(), name: form.name, role: "employee", active: true, permissions: [] }]);
         setForm({ name: "", email: "", password: "" });
       })
       .catch(e => setErr("مقدرناش ننشئ الحساب: " + e.message))
@@ -1840,10 +1856,53 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
   function toggleActive(email) {
     setAccounts(accounts.map(a => a.email === email ? { ...a, active: !a.active } : a));
   }
+  function togglePermission(email, key) {
+    setAccounts(accounts.map(a => {
+      if (a.email !== email) return a;
+      const perms = a.permissions || [];
+      const has = perms.includes(key);
+      return { ...a, permissions: has ? perms.filter(p => p !== key) : [...perms, key] };
+    }));
+  }
+  async function changePassword() {
+    if (!pwForm.current || !pwForm.next) return;
+    if (pwForm.next.length < 6) { setPwErr("كلمة المرور الجديدة لازم تكون 6 حروف على الأقل"); return; }
+    if (pwForm.next !== pwForm.confirm) { setPwErr("كلمة المرور الجديدة والتأكيد مش متطابقين"); return; }
+    setPwErr(""); setPwSuccess(""); setChangingPw(true);
+    try {
+      const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, pwForm.current);
+      await auth.currentUser.reauthenticateWithCredential(cred);
+      await auth.currentUser.updatePassword(pwForm.next);
+      setPwSuccess("تم تغيير كلمة المرور بنجاح");
+      setPwForm({ current: "", next: "", confirm: "" });
+    } catch (e) {
+      setPwErr("مقدرناش نغيّر كلمة المرور: " + e.message);
+    } finally {
+      setChangingPw(false);
+    }
+  }
 
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>إدارة الحسابات</h2>
+
+      <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>تغيير كلمة المرور لحسابي</h3>
+        <div className="grid grid-cols-1 gap-2">
+          <input type="password" placeholder="كلمة المرور الحالية" value={pwForm.current} onChange={e => setPwForm({ ...pwForm, current: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="password" placeholder="كلمة المرور الجديدة (6 حروف على الأقل)" value={pwForm.next} onChange={e => setPwForm({ ...pwForm, next: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="password" placeholder="تأكيد كلمة المرور الجديدة" value={pwForm.confirm} onChange={e => setPwForm({ ...pwForm, confirm: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        {pwErr && <p className="font-ui text-xs mt-2" style={{ color: C.red }}>{pwErr}</p>}
+        {pwSuccess && <p className="font-ui text-xs mt-2" style={{ color: C.teal }}>{pwSuccess}</p>}
+        <button onClick={changePassword} disabled={changingPw} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
+          style={{ background: `${C.teal}22`, color: C.teal }}>
+          {changingPw ? "بيغيّر..." : "تغيير كلمة المرور"}
+        </button>
+      </div>
 
       <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إنشاء حساب موظف جديد</h3>
@@ -1863,26 +1922,59 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
       </div>
 
       <div className="space-y-2">
-        {accounts.map(a => (
-          <div key={a.email} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: a.active ? `${C.teal}22` : `${C.red}18` }}>
-              <Users size={14} color={a.active ? C.teal : C.red} />
+        {accounts.map(a => {
+          const isSelf = a.email === currentUser.email;
+          const isOtherAdmin = a.role === "admin";
+          const expanded = expandedEmail === a.email;
+          const perms = a.permissions || [];
+          return (
+            <div key={a.email} className="rounded-xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: a.active ? `${C.teal}22` : `${C.red}18` }}>
+                  <Users size={14} color={a.active ? C.teal : C.red} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{a.name} {a.role === "admin" ? "(أدمن)" : ""}</p>
+                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{a.email}</p>
+                </div>
+                {!isOtherAdmin && (
+                  <button onClick={() => setExpandedEmail(expanded ? null : a.email)}
+                    className="px-3 py-1.5 rounded-lg font-ui text-[11px] font-semibold shrink-0"
+                    style={{ background: `${C.amber}22`, color: C.amber }}>
+                    {expanded ? "قفل الصلاحيات" : "الصلاحيات"}
+                  </button>
+                )}
+                {!isSelf && (
+                  <button onClick={() => toggleActive(a.email)}
+                    className="px-3 py-1.5 rounded-lg font-ui text-[11px] font-semibold shrink-0"
+                    style={{ background: a.active ? `${C.red}18` : `${C.teal}22`, color: a.active ? C.red : C.teal }}>
+                    {a.active ? "إيقاف الحساب" : "تفعيل الحساب"}
+                  </button>
+                )}
+              </div>
+              {expanded && !isOtherAdmin && (
+                <div className="p-3 pt-0" style={{ borderTop: `1px solid ${C.border}` }}>
+                  <p className="font-ui text-[11px] mb-2 mt-3" style={{ color: C.muted }}>افتح تابات إضافية لـ {a.name} (بخلاف التابات الأساسية اللي متاحة للجميع)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {PERMISSION_OPTIONS.map(opt => {
+                      const on = perms.includes(opt.key);
+                      return (
+                        <button key={opt.key} onClick={() => togglePermission(a.email, opt.key)}
+                          className="px-3 py-1.5 rounded-lg font-ui text-[11px] font-semibold"
+                          style={{ background: on ? `${C.teal}22` : C.surface2, color: on ? C.teal : C.muted, border: `1px solid ${on ? C.teal : C.border}` }}>
+                          {on ? "✓ " : ""}{opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{a.name} {a.role === "admin" ? "(أدمن)" : ""}</p>
-              <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{a.email}</p>
-            </div>
-            {a.email !== currentUser.email && (
-              <button onClick={() => toggleActive(a.email)}
-                className="px-3 py-1.5 rounded-lg font-ui text-[11px] font-semibold shrink-0"
-                style={{ background: a.active ? `${C.red}18` : `${C.teal}22`, color: a.active ? C.red : C.teal }}>
-                {a.active ? "إيقاف الحساب" : "تفعيل الحساب"}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
       <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>* "إيقاف الحساب" بيمنع الموظف من الدخول للنظام فورًا، لكن مش بيحذف حساب تسجيل الدخول بتاعه نهائيًا (ده محتاج إعداد إضافي في السيرفر). لو عايز حذف نهائي كلمني.</p>
+      <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>* الصلاحيات المفتوحة بتدّي المستخدم حق المشاهدة بس للتاب ده، مش حق الإضافة أو الحذف.</p>
     </div>
   );
 }
@@ -1954,7 +2046,7 @@ function AuthGate() {
     );
   }
   if (!user) return <LoginScreen errorMsg={errorMsg} />;
-  return <EtronicDashboard user={user} isAdmin={accountStatus.role === "admin"} />;
+  return <EtronicDashboard user={user} isAdmin={accountStatus.role === "admin"} permissions={accountStatus.permissions || []} />;
 }
 
 class ErrorBoundary extends React.Component {
