@@ -150,6 +150,46 @@ function computeConsumptionByPlate(fuelRecords) {
   }).filter(x => x.distance > 0);
 }
 
+function currentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function filterCurrentMonth(records) {
+  const ym = currentYearMonth();
+  return records.filter(r => (r.date || "").startsWith(ym));
+}
+
+// Km driven per vehicle during the current calendar month, using odometer log readings.
+// Uses the last reading before the month (if any) as the starting point so a single
+// reading taken mid-month still yields a distance, not just readings-within-month deltas.
+function computeMonthlyKmByPlate(odometerLogs) {
+  const ym = currentYearMonth();
+  const byPlate = {};
+  odometerLogs.forEach(l => {
+    if (!byPlate[l.plate]) byPlate[l.plate] = [];
+    byPlate[l.plate].push(l);
+  });
+  const result = [];
+  Object.entries(byPlate).forEach(([plate, list]) => {
+    const sorted = [...list].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    const inMonth = sorted.filter(l => (l.date || "").startsWith(ym));
+    if (inMonth.length === 0) return;
+    let startOdo;
+    if (inMonth.length >= 2) {
+      startOdo = Number(inMonth[0].odometer);
+    } else {
+      const before = sorted.filter(l => (l.date || "") < `${ym}-01`);
+      if (before.length === 0) return;
+      startOdo = Number(before[before.length - 1].odometer);
+    }
+    const endOdo = Number(inMonth[inMonth.length - 1].odometer);
+    const km = endOdo - startOdo;
+    if (km > 0) result.push({ plate, km });
+  });
+  return result.sort((a, b) => b.km - a.km);
+}
+
 function BarChart({ data, unit }) {
   const max = Math.max(...data.map(d => d.value), 1);
   return (
@@ -167,9 +207,13 @@ function BarChart({ data, unit }) {
   );
 }
 
-function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords }) {
-  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords || []), [fuelRecords]);
-  const chartData = consumptionByPlate
+function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs }) {
+  const monthlyKm = useMemo(() => computeMonthlyKmByPlate(odometerLogs || []), [odometerLogs]);
+  const kmChartData = monthlyKm.map(v => ({ label: v.plate, value: v.km, color: C.amber }));
+
+  const monthlyFuel = useMemo(() => filterCurrentMonth(fuelRecords || []), [fuelRecords]);
+  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(monthlyFuel), [monthlyFuel]);
+  const fuelChartData = consumptionByPlate
     .sort((a, b) => b.kmPerLiter - a.kmPerLiter)
     .map(v => ({ label: v.plate, value: v.kmPerLiter, color: v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L ? C.red : C.teal }));
 
@@ -184,13 +228,22 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
         <KpiCard icon={Truck} value={vehiclesCount} label="عدد العربيات النشطة" color={C.teal} />
       </div>
 
+      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>كيلومترات كل عربية على مدار الشهر الحالي</h3>
+        {kmChartData.length === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل عربية من تاب "قراءة العداد"</p>
+        ) : (
+          <BarChart data={kmChartData} unit=" كم" />
+        )}
+      </div>
+
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل عربية (كم/لتر)</h3>
-        {chartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل عربية على مدار الشهر الحالي (كم/لتر)</h3>
+        {fuelChartData.length === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
         ) : (
           <>
-            <BarChart data={chartData} unit=" كم/لتر" />
+            <BarChart data={fuelChartData} unit=" كم/لتر" />
             <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>* الشريط الأحمر معناه المعدل أقل من {FRAUD_THRESHOLD_KM_PER_L} كم/لتر — ممكن يكون فيه تلاعب في الوقود</p>
           </>
         )}
@@ -711,7 +764,7 @@ function parseReceiptText(text, vehiclesList, employeesList) {
   return result;
 }
 
-function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
+function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUser }) {
   const [form, setForm] = useState({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
   const [page, setPage] = useState(1);
   const [photoData, setPhotoData] = useState(null);
@@ -772,7 +825,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
   }
   function addRecord() {
     if (!form.plate || !form.date || !form.liters || !form.cost) return;
-    setRecords([...records, { id: Date.now(), ...form, photo: photoData || null }]);
+    setRecords([...records, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
     setPhotoData(null);
     setScanNote("");
@@ -834,6 +887,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
           <input type="number" placeholder="العداد (اختياري)" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>هيتسجل باسم المستخدم: {currentUser?.email}</p>
         <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
           <Plus size={14} /> إضافة
@@ -874,7 +928,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin }) {
                 </div>
                 <div className="flex-1">
                   <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
-                  <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} لتر{r.odometer ? ` · عداد ${r.odometer}` : ""}</p>
+                  <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} لتر{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.enteredBy ? ` · بواسطة ${r.enteredBy}` : ""}</p>
                 </div>
                 {r.photo && <img src={r.photo} alt="ريسيت" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
                 <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
@@ -1251,7 +1305,7 @@ function parseOdometerText(text) {
   return nums.sort((a, b) => b.length - a.length)[0];
 }
 
-function OdometerTab({ logs, setLogs, vehicles, currentUser }) {
+function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
   const [form, setForm] = useState({ plate: "", date: "", odometer: "" });
   const [page, setPage] = useState(1);
   const [photoData, setPhotoData] = useState(null);
@@ -1354,9 +1408,11 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser }) {
                 </div>
                 {l.photo && <img src={l.photo} alt="عداد" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
                 <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} كم</span>
-                <button onClick={() => removeLog(l.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
-                  <Trash2 size={13} color={C.red} />
-                </button>
+                {isAdmin && (
+                  <button onClick={() => removeLog(l.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
+                    <Trash2 size={13} color={C.red} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -1655,7 +1711,7 @@ function EtronicDashboard({ user, isAdmin }) {
   const Active = activeTabDef.comp;
 
   const extraProps = tab === "fuel"
-    ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees, isAdmin }
+    ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees, isAdmin, currentUser: user }
     : tab === "maintenance"
       ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin }
       : tab === "route"
@@ -1667,7 +1723,7 @@ function EtronicDashboard({ user, isAdmin }) {
             : tab === "vehicles"
               ? { vehicles, setVehicles, isAdmin }
               : tab === "odometer"
-                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user }
+                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin }
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles }
                   : tab === "settings"
@@ -1675,7 +1731,7 @@ function EtronicDashboard({ user, isAdmin }) {
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user }
                       : tab === "dash"
-                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords }
+                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs }
                         : {};
 
   return (
