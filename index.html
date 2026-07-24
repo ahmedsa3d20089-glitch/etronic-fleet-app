@@ -435,6 +435,8 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
   const [page, setPage] = useState(1);
   const [savingUid, setSavingUid] = useState(null);
   const [editUid, setEditUid] = useState(null);
+  const [editFieldsUid, setEditFieldsUid] = useState(null);
+  const [fieldsForm, setFieldsForm] = useState({ name: "", territory: "", governorate: "", city: "" });
   const [linkInput, setLinkInput] = useState("");
   const [resolvingLink, setResolvingLink] = useState(false);
   const [latInput, setLatInput] = useState("");
@@ -516,6 +518,14 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
     setCustomerLocations(prev => ({ ...prev, [uid]: { lat, lng, savedAt: new Date().toISOString() } }));
     setEditUid(null);
   }
+  function openFieldsEditor(c) {
+    setEditFieldsUid(editFieldsUid === c.uid ? null : c.uid);
+    setFieldsForm({ name: c.name || "", territory: c.territory || "", governorate: c.governorate || "", city: c.city || "" });
+  }
+  function saveFields(uid) {
+    setCustomers(customers.map(c => c.id === uid ? { ...c, ...fieldsForm } : c));
+    setEditFieldsUid(null);
+  }
 
   return (
     <div>
@@ -574,11 +584,36 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
                   {editing ? "قفل" : (loc ? "عدّل" : "ضيف موقع")}
                 </button>
                 {isAdmin && (
+                  <button onClick={() => openFieldsEditor(c)}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg font-ui text-[10px] font-semibold shrink-0"
+                    style={{ background: `${C.teal}22`, color: C.teal }}>
+                    {editFieldsUid === c.uid ? "قفل" : "تعديل البيانات"}
+                  </button>
+                )}
+                {isAdmin && (
                   <button onClick={() => removeCustomer(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="امسح العميل">
                     <Trash2 size={13} color={C.red} />
                   </button>
                 )}
               </div>
+
+              {isAdmin && editFieldsUid === c.uid && (
+                <div className="p-3 pt-0 space-y-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <input placeholder="الاسم" value={fieldsForm.name} onChange={e => setFieldsForm({ ...fieldsForm, name: e.target.value })}
+                      className="col-span-2 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    <input placeholder="الإقليم" value={fieldsForm.territory} onChange={e => setFieldsForm({ ...fieldsForm, territory: e.target.value })}
+                      className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    <input placeholder="المحافظة" value={fieldsForm.governorate} onChange={e => setFieldsForm({ ...fieldsForm, governorate: e.target.value })}
+                      className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    <input placeholder="المدينة" value={fieldsForm.city} onChange={e => setFieldsForm({ ...fieldsForm, city: e.target.value })}
+                      className="col-span-2 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  </div>
+                  <button onClick={() => saveFields(c.uid)} className="w-full px-3 py-2 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
+                    حفظ البيانات
+                  </button>
+                </div>
+              )}
 
               {editing && (
                 <div className="p-3 pt-0 space-y-3" style={{ borderTop: `1px solid ${C.border}` }}>
