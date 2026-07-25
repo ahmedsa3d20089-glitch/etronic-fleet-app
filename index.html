@@ -1848,7 +1848,8 @@ function LoginScreen({ errorMsg }) {
   function handleLogin() {
     if (!email || !password) return;
     setError(""); setLoading(true);
-    auth.signInWithEmailAndPassword(email.trim(), password)
+    const cleanEmail = email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "");
+    auth.signInWithEmailAndPassword(cleanEmail, password)
       .catch(err => setError("مقدرناش نسجل دخولك: " + err.message))
       .finally(() => setLoading(false));
   }
@@ -1898,11 +1899,19 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
   function createAccount() {
     if (!form.name || !form.email || !form.password) return;
     if (form.password.length < 6) { setErr("كلمة المرور لازم تكون 6 حروف/أرقام على الأقل"); return; }
+    // Arabic/RTL keyboards can silently insert invisible bidi-control characters
+    // (e.g. U+200E/U+200F, U+202A-U+202E) around the typed email, which makes
+    // Firebase reject it as "badly formatted" even though it looks correct on screen.
+    const cleanEmail = form.email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setErr("الإيميل مش بصيغة صحيحة — جرب تكتبه بلوحة مفاتيح إنجليزي بدل العربي");
+      return;
+    }
     setErr(""); setCreating(true);
-    secondaryAuth.createUserWithEmailAndPassword(form.email.trim(), form.password)
+    secondaryAuth.createUserWithEmailAndPassword(cleanEmail, form.password)
       .then(() => {
         secondaryAuth.signOut();
-        setAccounts([...accounts, { email: form.email.trim(), name: form.name, role: "employee", active: true, permissions: [] }]);
+        setAccounts([...accounts, { email: cleanEmail, name: form.name, role: "employee", active: true, permissions: [] }]);
         setForm({ name: "", email: "", password: "" });
       })
       .catch(e => setErr("مقدرناش ننشئ الحساب: " + e.message))
