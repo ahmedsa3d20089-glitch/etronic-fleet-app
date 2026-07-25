@@ -860,6 +860,17 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
   }
   function addRecord() {
     if (!form.plate || !form.date || !form.liters || !form.cost) return;
+    const isDuplicate = records.some(r =>
+      r.plate === form.plate &&
+      r.date === form.date &&
+      String(r.odometer || "") === String(form.odometer || "") &&
+      Number(r.liters) === Number(form.liters) &&
+      Number(r.cost) === Number(form.cost)
+    );
+    if (isDuplicate) {
+      alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ والعداد واللتر والتكلفة موجودين قبل كده");
+      return;
+    }
     setRecords([...records, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
     setPhotoData(null);
@@ -1377,6 +1388,15 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
   }
   function addLog() {
     if (!form.plate || !form.date || !form.odometer) return;
+    const isDuplicate = logs.some(l =>
+      l.plate === form.plate &&
+      l.date === form.date &&
+      String(l.odometer) === String(form.odometer)
+    );
+    if (isDuplicate) {
+      alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ وقراءة العداد موجودين قبل كده");
+      return;
+    }
     setLogs([...logs, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", odometer: "" });
     setPhotoData(null);
