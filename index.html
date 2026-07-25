@@ -1891,6 +1891,10 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
   function toggleActive(email) {
     setAccounts(accounts.map(a => a.email === email ? { ...a, active: !a.active } : a));
   }
+  function deleteAccount(email, name) {
+    if (!confirm(`متأكد إنك عايز تحذف حساب "${name}" نهائيًا؟ الحذف ده نهائي ومش هترجع فيه.`)) return;
+    setAccounts(accounts.filter(a => a.email !== email));
+  }
   function togglePermission(email, key) {
     setAccounts(accounts.map(a => {
       if (a.email !== email) return a;
@@ -1986,6 +1990,11 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
                     {a.active ? "إيقاف الحساب" : "تفعيل الحساب"}
                   </button>
                 )}
+                {!isSelf && !isOtherAdmin && (
+                  <button onClick={() => deleteAccount(a.email, a.name)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="حذف الحساب نهائيًا">
+                    <Trash2 size={13} color={C.red} />
+                  </button>
+                )}
               </div>
               {expanded && !isOtherAdmin && (
                 <div className="p-3 pt-0" style={{ borderTop: `1px solid ${C.border}` }}>
@@ -2008,7 +2017,7 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
           );
         })}
       </div>
-      <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>* "إيقاف الحساب" بيمنع الموظف من الدخول للنظام فورًا، لكن مش بيحذف حساب تسجيل الدخول بتاعه نهائيًا (ده محتاج إعداد إضافي في السيرفر). لو عايز حذف نهائي كلمني.</p>
+      <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>* "إيقاف الحساب" بيمنع الموظف من الدخول للنظام فورًا بشكل مؤقت وممكن ترجعه تاني. "حذف نهائي" بيشيل الحساب من قايمة حسابات النظام خالص فيبقى مينفعش يدخل خالص — لكن ملاحظة: بيانات تسجيل الدخول (الإيميل وكلمة المرور) بتفضل موجودة في Firebase من غير ما تتحذف فعليًا (ده محتاج وصول لإعدادات Firebase مباشرة لحذفه بالكامل)، فلو حبيت تمنعه فعليًا من عمل حساب تاني بنفس الإيميل، محتاج تتواصل معايا لحذفه من Firebase Console كمان.</p>
       <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>* الصلاحيات المفتوحة بتدّي المستخدم حق المشاهدة بس للتاب ده، مش حق الإضافة أو الحذف.</p>
     </div>
   );
