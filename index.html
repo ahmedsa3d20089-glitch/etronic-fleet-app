@@ -1429,13 +1429,44 @@ function TempAddressesRoute() {
     if (textareaRef.current) textareaRef.current.focus();
   }
 
+  function buildAddressQueryVariants(address) {
+    const base = address.trim();
+    const variants = [`${base}, مصر`];
+    // "ش" is a very common Egyptian abbreviation for "شارع" (street) that Nominatim
+    // often fails to match — spelling it out helps a lot.
+    const expanded = base.replace(/(^|\s)ش\.?\s/g, "$1شارع ").replace(/(^|\s)ميدان\.?\s/g, "$1ميدان ");
+    if (expanded !== base) variants.push(`${expanded}, مصر`);
+    // Drop a leading building/house number — Egypt's OSM coverage rarely has
+    // building-level detail, so "24 حي المعسكر..." often matches worse than "حي المعسكر...".
+    const noNumber = base.replace(/^\d+\s*/, "").trim();
+    if (noNumber && noNumber !== base) variants.push(`${noNumber}, مصر`);
+    const noNumberExpanded = expanded.replace(/^\d+\s*/, "").trim();
+    if (noNumberExpanded && noNumberExpanded !== noNumber && noNumberExpanded !== expanded) variants.push(`${noNumberExpanded}, مصر`);
+    // Last resort: just the city/governorate segment, so the stop still lands
+    // roughly in the right place instead of being dropped entirely.
+    const parts = base.split(/[،,]/).map(p => p.trim()).filter(Boolean);
+    if (parts.length > 1) variants.push(`${parts[parts.length - 1]}, مصر`);
+    return [...new Set(variants)];
+  }
+
   async function geocodeAddress(address) {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=eg&q=${encodeURIComponent(address)}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.length) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    const variants = buildAddressQueryVariants(address);
+    for (let i = 0; i < variants.length; i++) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(variants[i])}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length) {
+            return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), approx: i === variants.length - 1 && variants.length > 1 };
+          }
+        }
+      } catch (e) {
+        // try the next variant
+      }
+      if (i < variants.length - 1) await new Promise(r => setTimeout(r, 1100));
+    }
+    return null;
   }
 
   async function organizeRoute() {
@@ -1449,12 +1480,17 @@ function TempAddressesRoute() {
     setTempRoute(null);
     const geocoded = [];
     const failed = [];
+    const approxAddresses = [];
     for (let i = 0; i < lines.length; i++) {
       setProgress(`بيحدد إحداثيات عنوان ${i + 1} من ${lines.length}...`);
       try {
         const g = await geocodeAddress(lines[i]);
-        if (g) geocoded.push({ address: lines[i], ...g });
-        else failed.push(lines[i]);
+        if (g) {
+          geocoded.push({ address: lines[i], lat: g.lat, lng: g.lng });
+          if (g.approx) approxAddresses.push(lines[i]);
+        } else {
+          failed.push(lines[i]);
+        }
       } catch (e) {
         failed.push(lines[i]);
       }
@@ -1462,7 +1498,7 @@ function TempAddressesRoute() {
       if (i < lines.length - 1) await new Promise(r => setTimeout(r, 1100));
     }
     if (geocoded.length < 2) {
-      setErrorMsg("مقدرناش نحدد إحداثيات كفاية من العناوين دي. جرب تكتب كل عنوان بتفاصيل أوضح (اسم الشارع، المدينة، المحافظة)");
+      setErrorMsg("مقدرناش نحدد إحداثيات كفاية من العناوين دي. جرب تكتب كل عنوان بتفاصيل أوضح (اسم الشارع، المدينة، المحافظة)، أو اكتب اسم الشارع بالكامل بدل الاختصار زي \"شارع\" بدل \"ش\"");
       setGeocoding(false);
       setProgress("");
       return;
@@ -1487,7 +1523,8 @@ function TempAddressesRoute() {
         totalDistance: trip.distance,
         totalDuration: trip.duration,
         geometry: trip.geometry,
-        failed
+        failed,
+        approxAddresses
       });
     } catch (e) {
       setErrorMsg("حصل خطأ في ترتيب المسار: " + e.message + " — جرب تاني بعد شوية");
@@ -1549,6 +1586,13 @@ function TempAddressesRoute() {
             <div className="rounded-2xl p-3 mb-4" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
               <p className="font-ui text-xs font-semibold mb-1" style={{ color: C.red }}>⚠ العناوين دي مقدرناش نحدد إحداثياتها ومتضافتش للمسار:</p>
               {tempRoute.failed.map((f, i) => <p key={i} className="font-ui text-xs" style={{ color: C.muted }}>· {f}</p>)}
+            </div>
+          )}
+
+          {tempRoute.approxAddresses && tempRoute.approxAddresses.length > 0 && (
+            <div className="rounded-2xl p-3 mb-4" style={{ background: `${C.amber}11`, border: `1px solid ${C.amber}44` }}>
+              <p className="font-ui text-xs font-semibold mb-1" style={{ color: C.amber }}>🗂️ العناوين دي اتحددت بشكل تقريبي بس (مستوى المدينة/المحافظة مش الشارع بالظبط):</p>
+              {tempRoute.approxAddresses.map((f, i) => <p key={i} className="font-ui text-xs" style={{ color: C.muted }}>· {f}</p>)}
             </div>
           )}
 
