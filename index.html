@@ -17,8 +17,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -30,7 +28,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useMemo, useEffect, useRef } = React;
+const { useState, useMemo } = React;
 
 const VISION_API_KEY = "AIzaSyBCABnGTPi4lOyAes58FS3VhT9Yp3AQ76o";
 
@@ -1178,33 +1176,6 @@ function twoOptImprove(points) {
 }
 
 function RouteTab({ stops, setStops, customerLocations, customers }) {
-  const [mode, setMode] = useState("customers");
-  return (
-    <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>خط السير</h2>
-      <p className="font-ui text-xs mb-4" style={{ color: C.muted }}>اختار نوع الرحلة: عملاء من قاعدة البيانات، أو عناوين معارض مؤقتة مالهاش علاقة بالعملاء المسجلين</p>
-
-      <div className="flex items-center gap-2 mb-5">
-        <button onClick={() => setMode("customers")}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-ui text-xs font-semibold"
-          style={{ background: mode === "customers" ? `${C.amber}22` : C.surface2, color: mode === "customers" ? C.amber : C.muted, border: `1px solid ${mode === "customers" ? C.amber : C.border}` }}>
-          <Building2 size={14} /> العملاء المسجلين
-        </button>
-        <button onClick={() => setMode("temp")}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-ui text-xs font-semibold"
-          style={{ background: mode === "temp" ? `${C.teal}22` : C.surface2, color: mode === "temp" ? C.teal : C.muted, border: `1px solid ${mode === "temp" ? C.teal : C.border}` }}>
-          <MapPin size={14} /> عناوين تسليم معارض مؤقتة
-        </button>
-      </div>
-
-      {mode === "customers"
-        ? <RegisteredCustomersRoute stops={stops} setStops={setStops} customerLocations={customerLocations} customers={customers} />
-        : <TempAddressesRoute />}
-    </div>
-  );
-}
-
-function RegisteredCustomersRoute({ stops, setStops, customerLocations, customers }) {
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
 
@@ -1298,6 +1269,7 @@ function RegisteredCustomersRoute({ stops, setStops, customerLocations, customer
 
   return (
     <div>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>خط السير</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>ضيف العملاء اللي هتزورهم — الترتيب بيعتمد على الموقع GPS الفعلي لو محفوظ، وبيرجع للترتيب حسب المنطقة لو مش محفوظ</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
@@ -1374,250 +1346,6 @@ function RegisteredCustomersRoute({ stops, setStops, customerLocations, customer
             );
           })}
         </div>
-      )}
-    </div>
-  );
-}
-
-// Temporary exhibition delivery addresses: completely independent of the customers database.
-// Nothing entered here is ever saved to Firestore — it lives only in this component's local
-// state and disappears when you leave the tab. Geocoding via Nominatim (OpenStreetMap) and
-// route optimization via the public OSRM "trip" service, both free and keyless.
-function TempAddressesRoute() {
-  const [addressText, setAddressText] = useState("");
-  const [geocoding, setGeocoding] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [tempRoute, setTempRoute] = useState(null);
-  const textareaRef = useRef(null);
-  const mapContainerRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-
-  useEffect(() => {
-    if (!mapContainerRef.current || typeof L === "undefined") return;
-    const map = L.map(mapContainerRef.current).setView([30.0444, 31.2357], 6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors", maxZoom: 19
-    }).addTo(map);
-    mapInstanceRef.current = map;
-    return () => { map.remove(); mapInstanceRef.current = null; };
-  }, []);
-
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map || !tempRoute) return;
-    map.eachLayer(layer => { if (!(layer instanceof L.TileLayer)) map.removeLayer(layer); });
-    tempRoute.stops.forEach((s, i) => {
-      const icon = L.divIcon({
-        html: `<div style="background:#2F7BF2;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border:2px solid white;">${i + 1}</div>`,
-        className: "", iconSize: [24, 24], iconAnchor: [12, 12]
-      });
-      L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(`${i + 1}. ${s.address}`);
-    });
-    let coords;
-    if (tempRoute.geometry && tempRoute.geometry.coordinates) {
-      coords = tempRoute.geometry.coordinates.map(c => [c[1], c[0]]);
-    } else {
-      coords = tempRoute.stops.map(s => [s.lat, s.lng]);
-    }
-    L.polyline(coords, { color: "#3FA796", weight: 4 }).addTo(map);
-    if (coords.length) map.fitBounds(coords, { padding: [30, 30] });
-  }, [tempRoute]);
-
-  function addAddressLine() {
-    setAddressText(prev => (prev && !prev.endsWith("\n") ? prev + "\n" : prev));
-    if (textareaRef.current) textareaRef.current.focus();
-  }
-
-  function buildAddressQueryVariants(address) {
-    const base = address.trim();
-    const variants = [`${base}, مصر`];
-    // "ش" is a very common Egyptian abbreviation for "شارع" (street) that Nominatim
-    // often fails to match — spelling it out helps a lot.
-    const expanded = base.replace(/(^|\s)ش\.?\s/g, "$1شارع ").replace(/(^|\s)ميدان\.?\s/g, "$1ميدان ");
-    if (expanded !== base) variants.push(`${expanded}, مصر`);
-    // Drop a leading building/house number — Egypt's OSM coverage rarely has
-    // building-level detail, so "24 حي المعسكر..." often matches worse than "حي المعسكر...".
-    const noNumber = base.replace(/^\d+\s*/, "").trim();
-    if (noNumber && noNumber !== base) variants.push(`${noNumber}, مصر`);
-    const noNumberExpanded = expanded.replace(/^\d+\s*/, "").trim();
-    if (noNumberExpanded && noNumberExpanded !== noNumber && noNumberExpanded !== expanded) variants.push(`${noNumberExpanded}, مصر`);
-    // Last resort: just the city/governorate segment, so the stop still lands
-    // roughly in the right place instead of being dropped entirely.
-    const parts = base.split(/[،,]/).map(p => p.trim()).filter(Boolean);
-    if (parts.length > 1) variants.push(`${parts[parts.length - 1]}, مصر`);
-    return [...new Set(variants)];
-  }
-
-  async function geocodeAddress(address) {
-    const variants = buildAddressQueryVariants(address);
-    for (let i = 0; i < variants.length; i++) {
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(variants[i])}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.length) {
-            return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), approx: i === variants.length - 1 && variants.length > 1 };
-          }
-        }
-      } catch (e) {
-        // try the next variant
-      }
-      if (i < variants.length - 1) await new Promise(r => setTimeout(r, 1100));
-    }
-    return null;
-  }
-
-  async function organizeRoute() {
-    const lines = addressText.split("\n").map(s => s.trim()).filter(Boolean);
-    if (lines.length < 2) {
-      alert("دخّل عنوانين على الأقل عشان نقدر نرتب مسار بينهم");
-      return;
-    }
-    setGeocoding(true);
-    setErrorMsg("");
-    setTempRoute(null);
-    const geocoded = [];
-    const failed = [];
-    const approxAddresses = [];
-    for (let i = 0; i < lines.length; i++) {
-      setProgress(`بيحدد إحداثيات عنوان ${i + 1} من ${lines.length}...`);
-      try {
-        const g = await geocodeAddress(lines[i]);
-        if (g) {
-          geocoded.push({ address: lines[i], lat: g.lat, lng: g.lng });
-          if (g.approx) approxAddresses.push(lines[i]);
-        } else {
-          failed.push(lines[i]);
-        }
-      } catch (e) {
-        failed.push(lines[i]);
-      }
-      // Nominatim's usage policy caps free requests at ~1/sec — pace requests to respect that.
-      if (i < lines.length - 1) await new Promise(r => setTimeout(r, 1100));
-    }
-    if (geocoded.length < 2) {
-      setErrorMsg("مقدرناش نحدد إحداثيات كفاية من العناوين دي. جرب تكتب كل عنوان بتفاصيل أوضح (اسم الشارع، المدينة، المحافظة)، أو اكتب اسم الشارع بالكامل بدل الاختصار زي \"شارع\" بدل \"ش\"");
-      setGeocoding(false);
-      setProgress("");
-      return;
-    }
-    setProgress("بيرتب أفضل مسار...");
-    try {
-      const coordsStr = geocoded.map(g => `${g.lng},${g.lat}`).join(";");
-      const url = `https://router.project-osrm.org/trip/v1/driving/${coordsStr}?source=first&roundtrip=false&overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.code !== "Ok" || !data.trips || !data.trips.length) {
-        throw new Error(data.message || "خدمة ترتيب المسار مقدرتش ترد");
-      }
-      const trip = data.trips[0];
-      const ordered = data.waypoints
-        .map((w, originalIdx) => ({ ...geocoded[originalIdx], order: w.waypoint_index }))
-        .sort((a, b) => a.order - b.order);
-      const legs = trip.legs.map(l => ({ distance: l.distance, duration: l.duration }));
-      setTempRoute({
-        stops: ordered,
-        legs,
-        totalDistance: trip.distance,
-        totalDuration: trip.duration,
-        geometry: trip.geometry,
-        failed,
-        approxAddresses
-      });
-    } catch (e) {
-      setErrorMsg("حصل خطأ في ترتيب المسار: " + e.message + " — جرب تاني بعد شوية");
-    } finally {
-      setGeocoding(false);
-      setProgress("");
-    }
-  }
-
-  function clearTemp() {
-    setAddressText("");
-    setTempRoute(null);
-    setErrorMsg("");
-  }
-
-  return (
-    <div>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>العناوين دي مؤقتة بس — بتختفي لما تسيب التاب، ومش بتتحفظ في قاعدة بيانات العملاء خالص</p>
-
-      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>العناوين (سطر لكل عنوان)</h3>
-          <button onClick={addAddressLine} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
-            <Plus size={12} /> إضافة عنوان
-          </button>
-        </div>
-        <textarea
-          ref={textareaRef}
-          value={addressText}
-          onChange={e => setAddressText(e.target.value)}
-          placeholder={"مثال:\nمعرض القاهرة الدولي، التجمع الخامس، القاهرة\n15 شارع التحرير، الدقي، الجيزة\nكورنيش النيل، أسوان"}
-          rows={6}
-          className="w-full rounded-lg px-3 py-2.5 font-ui text-sm outline-none resize-y"
-          style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}
-        />
-        <div className="flex items-center gap-2 mt-3">
-          <button onClick={organizeRoute} disabled={geocoding} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
-            style={{ background: `${C.teal}22`, color: C.teal }}>
-            <Navigation size={14} /> {geocoding ? (progress || "بيرتب...") : "تنظيم خط السير"}
-          </button>
-          {(addressText || tempRoute) && (
-            <button onClick={clearTemp} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.red}18`, color: C.red }}>
-              <Trash2 size={14} /> تفريغ
-            </button>
-          )}
-        </div>
-        {errorMsg && <p className="font-ui text-xs mt-3" style={{ color: C.red }}>{errorMsg}</p>}
-      </div>
-
-      {tempRoute && (
-        <>
-          <div className="flex flex-wrap gap-3 mb-4">
-            <KpiCard icon={MapPin} value={tempRoute.stops.length} label="عدد المحطات" color={C.teal} />
-            <KpiCard icon={Navigation} value={(tempRoute.totalDistance / 1000).toFixed(1)} label="إجمالي المسافة (كم)" color={C.amber} />
-            <KpiCard icon={TrendingUp} value={Math.round(tempRoute.totalDuration / 60)} label="إجمالي الوقت المتوقع (دقيقة)" color={C.teal} />
-          </div>
-
-          {tempRoute.failed && tempRoute.failed.length > 0 && (
-            <div className="rounded-2xl p-3 mb-4" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
-              <p className="font-ui text-xs font-semibold mb-1" style={{ color: C.red }}>⚠ العناوين دي مقدرناش نحدد إحداثياتها ومتضافتش للمسار:</p>
-              {tempRoute.failed.map((f, i) => <p key={i} className="font-ui text-xs" style={{ color: C.muted }}>· {f}</p>)}
-            </div>
-          )}
-
-          {tempRoute.approxAddresses && tempRoute.approxAddresses.length > 0 && (
-            <div className="rounded-2xl p-3 mb-4" style={{ background: `${C.amber}11`, border: `1px solid ${C.amber}44` }}>
-              <p className="font-ui text-xs font-semibold mb-1" style={{ color: C.amber }}>🗂️ العناوين دي اتحددت بشكل تقريبي بس (مستوى المدينة/المحافظة مش الشارع بالظبط):</p>
-              {tempRoute.approxAddresses.map((f, i) => <p key={i} className="font-ui text-xs" style={{ color: C.muted }}>· {f}</p>)}
-            </div>
-          )}
-
-          <div className="rounded-2xl overflow-hidden mb-4" style={{ border: `1px solid ${C.border}` }}>
-            <div ref={mapContainerRef} style={{ height: 320, width: "100%" }} />
-          </div>
-
-          <div className="space-y-2">
-            {tempRoute.stops.map((s, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                <button onClick={() => openInGoogleMaps({ lat: s.lat, lng: s.lng })}
-                  className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}
-                  title="افتح في خرائط جوجل">
-                  {i + 1}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{s.address}</p>
-                  {tempRoute.legs[i] && (
-                    <p className="font-ui text-xs" style={{ color: C.muted }}>للمحطة الجاية: {(tempRoute.legs[i].distance / 1000).toFixed(1)} كم · {Math.round(tempRoute.legs[i].duration / 60)} دقيقة</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
       )}
     </div>
   );
