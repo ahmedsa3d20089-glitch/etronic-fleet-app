@@ -207,7 +207,7 @@ function BarChart({ data, unit }) {
   );
 }
 
-function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs }) {
+function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles }) {
   const monthlyKm = useMemo(() => computeMonthlyKmByPlate(odometerLogs || []), [odometerLogs]);
   const kmChartData = monthlyKm.map(v => ({ label: v.plate, value: v.km, color: C.amber }));
 
@@ -217,10 +217,38 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
     .sort((a, b) => b.kmPerLiter - a.kmPerLiter)
     .map(v => ({ label: v.plate, value: v.kmPerLiter, color: v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L ? C.red : C.teal }));
 
+  const today = new Date().toISOString().slice(0, 10);
+  const overdueMaintenance = useMemo(() =>
+    (maintenanceRecords || []).filter(r => r.nextDue && r.nextDue < today).length,
+    [maintenanceRecords, today]);
+  const oilAlertsCount = useMemo(() => {
+    const OIL_INTERVAL_KM = 2000;
+    let count = 0;
+    (vehicles || []).forEach(v => {
+      const logsForPlate = (odometerLogs || []).filter(l => l.plate === v.plate && l.odometer);
+      if (logsForPlate.length === 0) return;
+      const currentOdometer = Math.max(...logsForPlate.map(l => Number(l.odometer)));
+      const oilChanges = (maintenanceRecords || []).filter(r => r.plate === v.plate && r.type === "تغيير زيت" && r.odometer);
+      const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
+      if (currentOdometer - lastOilOdometer >= OIL_INTERVAL_KM) count++;
+    });
+    return count;
+  }, [vehicles, odometerLogs, maintenanceRecords]);
+
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>لوحة التحكم</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>نظرة عامة على بيانات الأسطول الحية</p>
+
+      {(overdueMaintenance > 0 || oilAlertsCount > 0) && (
+        <div className="rounded-2xl p-3.5 mb-5 flex items-center gap-2 flex-wrap" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
+          <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ تنبيهات صيانة:</span>
+          {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} صيانة مجدولة فات ميعادها</span>}
+          {overdueMaintenance > 0 && oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
+          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} عربية محتاجة تغيير زيت</span>}
+          <span className="font-ui text-[11px]" style={{ color: C.muted }}>(التفاصيل في تاب "الصيانة")</span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Building2} value={customersCount} label="عدد العملاء في قاعدة البيانات" color={C.teal} />
@@ -442,10 +470,20 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
   const [latInput, setLatInput] = useState("");
   const [lngInput, setLngInput] = useState("");
   const [form, setForm] = useState({ name: "", code: "", territory: "", governorate: "", city: "" });
+  const [filterTerritory, setFilterTerritory] = useState("");
+  const [filterGovernorate, setFilterGovernorate] = useState("");
   const withUid = useMemo(() => customers.map(c => ({ ...c, uid: c.id })), [customers]);
+  const territoryOptions = useMemo(() =>
+    [...new Set(withUid.map(c => c.territory).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [withUid]);
+  const governorateOptions = useMemo(() =>
+    [...new Set(withUid.map(c => c.governorate).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [withUid]);
   const filtered = useMemo(() => withUid.filter(c =>
-    (c.name || "").toLowerCase().includes(q.toLowerCase()) || String(c.code).includes(q) || (c.territory || "").toLowerCase().includes(q.toLowerCase())
-  ), [q, withUid]);
+    ((c.name || "").toLowerCase().includes(q.toLowerCase()) || String(c.code).includes(q) || (c.territory || "").toLowerCase().includes(q.toLowerCase()))
+    && (!filterTerritory || c.territory === filterTerritory)
+    && (!filterGovernorate || c.governorate === filterGovernorate)
+  ), [q, withUid, filterTerritory, filterGovernorate]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function addCustomer() {
@@ -555,6 +593,25 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
       )}
 
       <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود أو الإقليم..." />
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <select value={filterTerritory} onChange={e => { setFilterTerritory(e.target.value); setPage(1); }}
+          className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">كل الأقاليم</option>
+          {territoryOptions.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filterGovernorate} onChange={e => { setFilterGovernorate(e.target.value); setPage(1); }}
+          className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">كل المحافظات</option>
+          {governorateOptions.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        {(filterTerritory || filterGovernorate) && (
+          <button onClick={() => { setFilterTerritory(""); setFilterGovernorate(""); setPage(1); }}
+            className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>
+            مسح الفلاتر
+          </button>
+        )}
+        <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} نتيجة</span>
+      </div>
       <div className="space-y-2">
         {paged.map((c) => {
           const loc = customerLocations[c.uid];
@@ -657,6 +714,82 @@ function EmptyState({ text }) {
   return (
     <div className="rounded-2xl p-8 text-center" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
       <p className="font-ui text-sm" style={{ color: C.muted }}>{text}</p>
+    </div>
+  );
+}
+
+function SkeletonBar({ width = "100%", height = 14 }) {
+  return (
+    <div style={{
+      width, height, borderRadius: 8, background: C.surface2,
+      backgroundImage: `linear-gradient(90deg, ${C.surface2} 0%, ${C.border} 50%, ${C.surface2} 100%)`,
+      backgroundSize: "200% 100%", animation: "etronic-shimmer 1.4s ease-in-out infinite",
+    }} />
+  );
+}
+
+function SkeletonLoader({ rows = 4 }) {
+  return (
+    <div>
+      <style>{`@keyframes etronic-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+      <div className="flex flex-wrap gap-3 mb-6">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}`, width: 150 }}>
+            <SkeletonBar width={60} height={20} />
+            <div className="mt-2"><SkeletonBar width="80%" height={10} /></div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <SkeletonBar width="40%" height={12} />
+            <div className="mt-2"><SkeletonBar width="65%" height={10} /></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// pub-sub خفيف لحالة الحفظ — يستخدمه useFirestoreState وSaveIndicator بدون الحاجة لتمرير props لكل تبويب
+const saveStatusListeners = new Set();
+let saveStatusState = { count: 0, lastError: null };
+function announceSaving() {
+  saveStatusState = { ...saveStatusState, count: saveStatusState.count + 1 };
+  saveStatusListeners.forEach(fn => fn(saveStatusState));
+}
+function announceSaved(err) {
+  saveStatusState = { count: Math.max(0, saveStatusState.count - 1), lastError: err || null };
+  saveStatusListeners.forEach(fn => fn(saveStatusState));
+}
+function useSaveStatus() {
+  const [status, setStatus] = useState(saveStatusState);
+  React.useEffect(() => {
+    saveStatusListeners.add(setStatus);
+    return () => saveStatusListeners.delete(setStatus);
+  }, []);
+  return status;
+}
+function SaveIndicator() {
+  const { count, lastError } = useSaveStatus();
+  const [showSaved, setShowSaved] = useState(false);
+  const prevCount = React.useRef(0);
+  React.useEffect(() => {
+    if (prevCount.current > 0 && count === 0 && !lastError) {
+      setShowSaved(true);
+      const t = setTimeout(() => setShowSaved(false), 1800);
+      return () => clearTimeout(t);
+    }
+    prevCount.current = count;
+  }, [count, lastError]);
+  if (count === 0 && !showSaved && !lastError) return null;
+  const label = lastError ? "⚠ فشل الحفظ — تأكد من الاتصال بالإنترنت" : (count > 0 ? "بيتحفظ..." : "✓ تم الحفظ");
+  const color = lastError ? C.red : (count > 0 ? C.amber : C.teal);
+  return (
+    <div className="fixed bottom-4 left-4 z-50 px-3 py-2 rounded-lg font-ui text-xs font-semibold shadow-lg"
+      style={{ background: C.surface, border: `1px solid ${color}66`, color }}>
+      {label}
     </div>
   );
 }
@@ -1762,7 +1895,10 @@ function useFirestoreState(key, initialFn) {
   function setAndSync(updater) {
     const next = typeof updater === "function" ? updater(stateRef.current) : updater;
     setState(next);
-    db.collection("etronic_data").doc(key).set({ value: next }).catch(() => {});
+    announceSaving();
+    db.collection("etronic_data").doc(key).set({ value: next })
+      .then(() => announceSaved(null))
+      .catch((err) => announceSaved(err));
   }
 
   return [state, setAndSync, ready];
@@ -1770,15 +1906,16 @@ function useFirestoreState(key, initialFn) {
 
 function EtronicDashboard({ user, isAdmin, permissions }) {
   const [tab, setTab] = useState("dash");
-  const [fuelRecords, setFuelRecords] = useFirestoreState("etronic_fuel", () => []);
-  const [maintenanceRecords, setMaintenanceRecords] = useFirestoreState("etronic_maintenance", () => []);
+  const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreState("etronic_fuel", () => []);
+  const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreState("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
-  const [customers, setCustomers] = useFirestoreState("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
-  const [employees, setEmployees] = useFirestoreState("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
-  const [vehicles, setVehicles] = useFirestoreState("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })));
-  const [odometerLogs, setOdometerLogs] = useFirestoreState("etronic_odometer", () => []);
+  const [customers, setCustomers, customersReady] = useFirestoreState("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
+  const [employees, setEmployees, employeesReady] = useFirestoreState("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
+  const [vehicles, setVehicles, vehiclesReady] = useFirestoreState("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })));
+  const [odometerLogs, setOdometerLogs, odometerReady] = useFirestoreState("etronic_odometer", () => []);
   const [customerLocations, setCustomerLocations] = useFirestoreState("etronic_customer_locations", () => ({}));
   const [accounts, setAccounts] = useFirestoreState("etronic_accounts", () => []);
+  const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
 
   const RESTRICTED_KEYS = ["reports", "vehicles", "employees", "customers"];
   const BASE_USER_TABS = TABS.filter(t => !RESTRICTED_KEYS.includes(t.key));
@@ -1808,7 +1945,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user }
                       : tab === "dash"
-                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs }
+                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles }
                         : {};
 
   return (
@@ -1852,9 +1989,10 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
           </button>
         </div>
         <main className="p-6 overflow-y-auto">
-          <Active {...extraProps} />
+          {dataReady ? <Active {...extraProps} /> : <SkeletonLoader />}
         </main>
       </div>
+      <SaveIndicator />
     </div>
   );
 }
@@ -2132,9 +2270,12 @@ function AuthGate() {
 
   if (user === undefined || (user && accountStatus === undefined)) {
     return (
-      <div dir="rtl" className="font-ui min-h-screen flex items-center justify-center" style={{ background: C.bg }}>
+      <div dir="rtl" className="font-ui min-h-screen p-6" style={{ background: C.bg }}>
         <style>{FONTS}</style>
-        <p className="font-ui text-sm" style={{ color: C.muted }}>بيحمّل...</p>
+        <div className="max-w-md mx-auto mt-10">
+          <SkeletonLoader rows={2} />
+          <p className="font-ui text-xs text-center mt-4" style={{ color: C.muted }}>بيتم التحقق من حسابك...</p>
+        </div>
       </div>
     );
   }
