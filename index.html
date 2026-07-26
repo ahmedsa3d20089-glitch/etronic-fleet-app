@@ -871,6 +871,17 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ والعداد واللتر والتكلفة موجودين قبل كده");
       return;
     }
+    if (form.odometer) {
+      const platesOdo = records.filter(r => r.plate === form.plate && r.odometer).map(r => Number(r.odometer));
+      if (platesOdo.length > 0) {
+        const lastOdo = Math.max(...platesOdo);
+        const diff = Number(form.odometer) - lastOdo;
+        if (diff < 0 || diff > 3000) {
+          const ok = confirm(`قراءة العداد دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر عداد مسجل لنفس العربية (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
+          if (!ok) return;
+        }
+      }
+    }
     setRecords([...records, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
     setPhotoData(null);
@@ -1396,6 +1407,15 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
     if (isDuplicate) {
       alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ وقراءة العداد موجودين قبل كده");
       return;
+    }
+    const platesLogs = logs.filter(l => l.plate === form.plate);
+    if (platesLogs.length > 0) {
+      const lastOdo = Math.max(...platesLogs.map(l => Number(l.odometer) || 0));
+      const diff = Number(form.odometer) - lastOdo;
+      if (diff < 0 || diff > 3000) {
+        const ok = confirm(`القراءة دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجلة لنفس العربية (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
+        if (!ok) return;
+      }
     }
     setLogs([...logs, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
     setForm({ plate: "", date: "", odometer: "" });
