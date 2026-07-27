@@ -1906,6 +1906,7 @@ function useFirestoreCollection(key, initialFn, idField = "id") {
     const unsub = colRef.onSnapshot(async (snap) => {
       if (cancelled) return;
       if (!snap.empty || migratingRef.current) {
+        console.log("[etronic] collection", key, "loaded", snap.docs.length, "docs");
         setState(snap.docs.map(d => d.data()));
         setReady(true);
         return;
@@ -1923,9 +1924,13 @@ function useFirestoreCollection(key, initialFn, idField = "id") {
         if (ops.length > 0) await commitOpsChunked(ops);
         else setReady(true);
       } catch (e) {
+        console.error("[etronic] collection migration failed for", key, e);
         setReady(true);
       }
-    }, () => setReady(true));
+    }, (e) => {
+      console.error("[etronic] collection onSnapshot error for", key, e);
+      setReady(true);
+    });
 
     return () => { cancelled = true; unsub(); };
   }, [key]);
@@ -1964,6 +1969,7 @@ function useFirestoreMap(key, initialFn) {
     const unsub = colRef.onSnapshot(async (snap) => {
       if (cancelled) return;
       if (!snap.empty || migratingRef.current) {
+        console.log("[etronic] map", key, "loaded", snap.docs.length, "docs");
         const next = {};
         snap.docs.forEach(d => { next[d.id] = d.data(); });
         setState(next);
@@ -1979,9 +1985,13 @@ function useFirestoreMap(key, initialFn) {
         if (ops.length > 0) await commitOpsChunked(ops);
         else setReady(true);
       } catch (e) {
+        console.error("[etronic] map migration failed for", key, e);
         setReady(true);
       }
-    }, () => setReady(true));
+    }, (e) => {
+      console.error("[etronic] map onSnapshot error for", key, e);
+      setReady(true);
+    });
 
     return () => { cancelled = true; unsub(); };
   }, [key]);
