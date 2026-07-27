@@ -752,7 +752,7 @@ function SkeletonLoader({ rows = 4 }) {
   );
 }
 
-// pub-sub خفيف لحالة الحفظ — يستخدمه useFirestoreState وSaveIndicator بدون الحاجة لتمرير props لكل تبويب
+// pub-sub خفيف لحالة الحفظ — تستخدمه هوكس التخزين (useFirestoreCollection/useFirestoreMap) وSaveIndicator بدون الحاجة لتمرير props لكل تبويب
 const saveStatusListeners = new Set();
 let saveStatusState = { count: 0, lastError: null };
 function announceSaving() {
@@ -1870,35 +1870,133 @@ const TABS = [
   { key: "settings", label: "الإعدادات", icon: Wrench, comp: SettingsTab },
 ];
 
-function useFirestoreState(key, initialFn) {
+async function commitOpsChunked(ops) {
+  for (let i = 0; i < ops.length; i += 450) {
+    const chunk = ops.slice(i, i + 450);
+    if (chunk.length === 0) continue;
+    const batch = db.batch();
+    chunk.forEach(op => {
+      if (op.type === "delete") batch.delete(op.ref);
+      else batch.set(op.ref, op.data);
+    });
+    await batch.commit();
+  }
+}
+
+// يخزّن كل سجل كـ document منفصل بدل مصفوفة واحدة ضخمة في document واحد.
+// ده بيحل مشكلتين أساسيتين: حد الـ1MB لكل document في Firestore (كان
+// ممكن يتحقق مع نمو بيانات العملاء/الوقود)، وتعارض الكتابة المتزامن
+// (لو اتنين عدّلوا في نفس اللحظة، كل تعديل كان بيمسح تعديل التاني لأنه
+// بيكتب فوق المصفوفة كاملة؛ دلوقتي كل سجل مستقل تمامًا عن باقي السجلات).
+// أول مرة تلاقي الـ collection فاضية، بتهاجر البيانات أوتوماتيك من نظام
+// التخزين القديم (etronic_data/{key})، والنسخة القديمة بتفضل موجودة
+// كنسخة احتياطية ومبيتمسحش منها حاجة.
+function useFirestoreCollection(key, initialFn, idField = "id") {
   const [state, setState] = useState(initialFn());
   const [ready, setReady] = useState(false);
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  const migratingRef = React.useRef(false);
 
   React.useEffect(() => {
-    const ref = db.collection("etronic_data").doc(key);
-    const unsub = ref.onSnapshot(
-      (snap) => {
-        if (snap.exists) {
-          setState(snap.data().value);
-        } else {
-          ref.set({ value: initialFn() }).catch(() => {});
-        }
+    const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    const legacyRef = db.collection("etronic_data").doc(key);
+    let cancelled = false;
+
+    const unsub = colRef.onSnapshot(async (snap) => {
+      if (cancelled) return;
+      if (!snap.empty || migratingRef.current) {
+        setState(snap.docs.map(d => d.data()));
         setReady(true);
-      },
-      () => setReady(true)
-    );
-    return unsub;
+        return;
+      }
+      migratingRef.current = true;
+      try {
+        const legacySnap = await legacyRef.get();
+        const legacyValue = legacySnap.exists ? legacySnap.data().value : null;
+        const seed = Array.isArray(legacyValue) && legacyValue.length > 0 ? legacyValue : initialFn();
+        const ops = seed.map(item => ({
+          type: "set",
+          ref: colRef.doc(String(item[idField] != null ? item[idField] : (Date.now() + Math.random()))),
+          data: item,
+        }));
+        if (ops.length > 0) await commitOpsChunked(ops);
+        else setReady(true);
+      } catch (e) {
+        setReady(true);
+      }
+    }, () => setReady(true));
+
+    return () => { cancelled = true; unsub(); };
   }, [key]);
 
   function setAndSync(updater) {
-    const next = typeof updater === "function" ? updater(stateRef.current) : updater;
+    const prev = stateRef.current;
+    const next = typeof updater === "function" ? updater(prev) : updater;
     setState(next);
     announceSaving();
-    db.collection("etronic_data").doc(key).set({ value: next })
-      .then(() => announceSaved(null))
-      .catch((err) => announceSaved(err));
+    const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    const nextIds = new Set(next.map(item => String(item[idField])));
+    const ops = [
+      ...next.map(item => ({ type: "set", ref: colRef.doc(String(item[idField])), data: item })),
+      ...prev.filter(item => !nextIds.has(String(item[idField]))).map(item => ({ type: "delete", ref: colRef.doc(String(item[idField])) })),
+    ];
+    commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
+  }
+
+  return [state, setAndSync, ready];
+}
+
+// نفس فكرة useFirestoreCollection، بس لبيانات على شكل object/map (زي مواقع
+// العملاء المخزنة بمفتاح uid لكل عميل) بدل array من السجلات
+function useFirestoreMap(key, initialFn) {
+  const [state, setState] = useState(initialFn());
+  const [ready, setReady] = useState(false);
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
+  const migratingRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    const legacyRef = db.collection("etronic_data").doc(key);
+    let cancelled = false;
+
+    const unsub = colRef.onSnapshot(async (snap) => {
+      if (cancelled) return;
+      if (!snap.empty || migratingRef.current) {
+        const next = {};
+        snap.docs.forEach(d => { next[d.id] = d.data(); });
+        setState(next);
+        setReady(true);
+        return;
+      }
+      migratingRef.current = true;
+      try {
+        const legacySnap = await legacyRef.get();
+        const legacyValue = legacySnap.exists ? legacySnap.data().value : null;
+        const seed = legacyValue && typeof legacyValue === "object" ? legacyValue : initialFn();
+        const ops = Object.entries(seed).map(([k, v]) => ({ type: "set", ref: colRef.doc(String(k)), data: v }));
+        if (ops.length > 0) await commitOpsChunked(ops);
+        else setReady(true);
+      } catch (e) {
+        setReady(true);
+      }
+    }, () => setReady(true));
+
+    return () => { cancelled = true; unsub(); };
+  }, [key]);
+
+  function setAndSync(updater) {
+    const prev = stateRef.current;
+    const next = typeof updater === "function" ? updater(prev) : updater;
+    setState(next);
+    announceSaving();
+    const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    const ops = [
+      ...Object.entries(next).map(([k, v]) => ({ type: "set", ref: colRef.doc(String(k)), data: v })),
+      ...Object.keys(prev).filter(k => !(k in next)).map(k => ({ type: "delete", ref: colRef.doc(String(k)) })),
+    ];
+    commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
   }
 
   return [state, setAndSync, ready];
@@ -1906,15 +2004,15 @@ function useFirestoreState(key, initialFn) {
 
 function EtronicDashboard({ user, isAdmin, permissions }) {
   const [tab, setTab] = useState("dash");
-  const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreState("etronic_fuel", () => []);
-  const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreState("etronic_maintenance", () => []);
+  const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreCollection("etronic_fuel", () => []);
+  const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreCollection("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
-  const [customers, setCustomers, customersReady] = useFirestoreState("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
-  const [employees, setEmployees, employeesReady] = useFirestoreState("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
-  const [vehicles, setVehicles, vehiclesReady] = useFirestoreState("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })));
-  const [odometerLogs, setOdometerLogs, odometerReady] = useFirestoreState("etronic_odometer", () => []);
-  const [customerLocations, setCustomerLocations] = useFirestoreState("etronic_customer_locations", () => ({}));
-  const [accounts, setAccounts] = useFirestoreState("etronic_accounts", () => []);
+  const [customers, setCustomers, customersReady] = useFirestoreCollection("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
+  const [employees, setEmployees, employeesReady] = useFirestoreCollection("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
+  const [vehicles, setVehicles, vehiclesReady] = useFirestoreCollection("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })));
+  const [odometerLogs, setOdometerLogs, odometerReady] = useFirestoreCollection("etronic_odometer", () => []);
+  const [customerLocations, setCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}));
+  const [accounts, setAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email");
   const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
 
   const RESTRICTED_KEYS = ["reports", "vehicles", "employees", "customers"];
@@ -2222,32 +2320,42 @@ function AuthGate() {
 
   React.useEffect(() => {
     if (!user) { setAccountStatus(undefined); return; }
-    const ref = db.collection("etronic_data").doc("etronic_accounts");
+    const colRef = db.collection("etronic_data_v2").doc("etronic_accounts").collection("items");
+    const legacyRef = db.collection("etronic_data").doc("etronic_accounts");
 
     async function decide(snap) {
-      const list = snap.exists ? (snap.data().value || []) : [];
-      if (list.length === 0) {
-        // Never trust a cached/offline empty result to mean "no accounts exist yet" —
-        // force a fresh read from the server before ever bootstrapping an admin.
-        try {
-          const serverSnap = await ref.get({ source: "server" });
-          const serverList = serverSnap.exists ? (serverSnap.data().value || []) : [];
-          if (serverList.length === 0) {
-            const bootstrapped = [{ email: user.email, name: user.email, role: "admin", active: true }];
-            await ref.set({ value: bootstrapped });
-            setAccountStatus({ role: "admin", active: true });
-          } else {
-            const mine = serverList.find(a => a.email === user.email);
-            handleAccount(mine);
-          }
-        } catch (e) {
-          setErrorMsg("مقدرناش نتأكد من حسابك (مشكلة اتصال). جرب تاني.");
-          auth.signOut();
-        }
+      if (!snap.empty) {
+        const list = snap.docs.map(d => d.data());
+        const mine = list.find(a => a.email === user.email);
+        handleAccount(mine);
         return;
       }
-      const mine = list.find(a => a.email === user.email);
-      handleAccount(mine);
+      // الـ collection الجديدة فاضية — ممكن يكون فيه حسابات لسه في نظام
+      // التخزين القديم ما اتهاجرتش، أو يكون ده أول مستخدم للنظام خالص.
+      // منستخدمش نتيجة مخزنة (cache) في قرار إنشاء أول أدمن — لازم قراءة
+      // فعلية من السيرفر.
+      try {
+        const legacySnap = await legacyRef.get({ source: "server" });
+        const legacyList = legacySnap.exists ? (legacySnap.data().value || []) : [];
+        if (legacyList.length > 0) {
+          const mine = legacyList.find(a => a.email === user.email);
+          handleAccount(mine);
+          return;
+        }
+        const serverColSnap = await colRef.get({ source: "server" });
+        if (!serverColSnap.empty) {
+          const list = serverColSnap.docs.map(d => d.data());
+          const mine = list.find(a => a.email === user.email);
+          handleAccount(mine);
+          return;
+        }
+        const bootstrapped = { email: user.email, name: user.email, role: "admin", active: true };
+        await colRef.doc(user.email).set(bootstrapped);
+        setAccountStatus(bootstrapped);
+      } catch (e) {
+        setErrorMsg("مقدرناش نتأكد من حسابك (مشكلة اتصال). جرب تاني.");
+        auth.signOut();
+      }
     }
 
     function handleAccount(mine) {
@@ -2264,7 +2372,9 @@ function AuthGate() {
       setAccountStatus(mine);
     }
 
-    const unsub = ref.onSnapshot(decide);
+    const unsub = colRef.onSnapshot(decide, () => {
+      setErrorMsg("مقدرناش نتأكد من حسابك (مشكلة اتصال). جرب تاني.");
+    });
     return unsub;
   }, [user]);
 
