@@ -1,4 +1,4 @@
-const CACHE_NAME = "etronic-fleet-v2";
+const CACHE_NAME = "etronic-fleet-v3";
 const CORE_ASSETS = [
   "./index.html",
   "./manifest.json",
@@ -39,12 +39,23 @@ self.addEventListener("activate", (event) => {
 // This means updates (like new logos, permissions, etc.) show up immediately
 // on the very next load, instead of waiting for a second reload.
 self.addEventListener("fetch", (event) => {
+  // IMPORTANT: only intercept simple GET requests. Firestore's real-time
+  // sync uses POST-based requests (and cross-origin requests to Google's
+  // servers) to keep the live connection open -- the Cache API cannot
+  // store non-GET requests, and intercepting them here was breaking
+  // Firestore's live updates (fuel/maintenance/odometer data wasn't
+  // loading) and throwing "Request method 'POST' is unsupported" errors.
+  // Anything that isn't a plain GET is left completely alone.
+  if (event.request.method !== "GET") {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone).catch(() => {}));
         }
         return networkResponse;
       })
