@@ -1843,19 +1843,19 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [fuelFrom, setFuelFrom] = useState("");
   const [fuelTo, setFuelTo] = useState("");
-  const [fuelDriver, setFuelDriver] = useState("");
+  const [fuelPlate, setFuelPlate] = useState("");
   const [kmFrom, setKmFrom] = useState("");
   const [kmTo, setKmTo] = useState("");
 
   const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords), [fuelRecords]);
 
   const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
-  const driverOptions = useMemo(() =>
-    [...new Set(perFillAll.map(r => r.driver).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+  const plateOptions = useMemo(() =>
+    [...new Set(perFillAll.map(r => r.plate).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [perFillAll]);
   const perFill = useMemo(() => perFillAll.filter(r =>
-    (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelDriver || r.driver === fuelDriver)
-  ), [perFillAll, fuelFrom, fuelTo, fuelDriver]);
+    (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelPlate || r.plate === fuelPlate)
+  ), [perFillAll, fuelFrom, fuelTo, fuelPlate]);
   const perFillTotalsByPlate = useMemo(() => {
     const byPlate = {};
     perFill.forEach(r => {
@@ -1981,10 +1981,10 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={fuelTo} onChange={e => setFuelTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <select value={fuelDriver} onChange={e => setFuelDriver(e.target.value)}
+          <select value={fuelPlate} onChange={e => setFuelPlate(e.target.value)}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("كل السائقين", "All drivers")}</option>
-            {driverOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            <option value="">{tr("كل السيارات", "All vehicles")}</option>
+            {plateOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
         {perFill.length === 0 ? (
@@ -2096,7 +2096,7 @@ function SettingsTab({ currentUser, lang, setLang }) {
           <button onClick={() => setLang("ar")}
             className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
             style={{ background: lang === "ar" ? `${C.teal}22` : C.surface2, color: lang === "ar" ? C.teal : C.muted, border: `1px solid ${lang === "ar" ? C.teal : C.border}` }}>
-            السيارة
+            العربية
           </button>
           <button onClick={() => setLang("en")}
             className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
