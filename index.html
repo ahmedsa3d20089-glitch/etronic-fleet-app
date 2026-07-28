@@ -235,18 +235,24 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
     return count;
   }, [vehicles, odometerLogs, maintenanceRecords]);
 
+  const fuelAnomalyCount = useMemo(() =>
+    consumptionByPlate.filter(v => v.kmPerLiter > 0 && v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L).length,
+    [consumptionByPlate]);
+
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>لوحة التحكم</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>نظرة عامة على بيانات الأسطول الحية</p>
 
-      {(overdueMaintenance > 0 || oilAlertsCount > 0) && (
+      {(overdueMaintenance > 0 || oilAlertsCount > 0 || fuelAnomalyCount > 0) && (
         <div className="rounded-2xl p-3.5 mb-5 flex items-center gap-2 flex-wrap" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
-          <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ تنبيهات صيانة:</span>
+          <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ تنبيهات:</span>
           {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} صيانة مجدولة فات ميعادها</span>}
-          {overdueMaintenance > 0 && oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
+          {overdueMaintenance > 0 && (oilAlertsCount > 0 || fuelAnomalyCount > 0) && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
           {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} عربية محتاجة تغيير زيت</span>}
-          <span className="font-ui text-[11px]" style={{ color: C.muted }}>(التفاصيل في تاب "الصيانة")</span>
+          {oilAlertsCount > 0 && fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
+          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} عربية معدل استهلاكها غير طبيعي الشهر ده</span>}
+          <span className="font-ui text-[11px]" style={{ color: C.muted }}>(التفاصيل في تابات "الصيانة" و"الوقود")</span>
         </div>
       )}
 
@@ -1646,7 +1652,7 @@ function computePerFillConsumption(fuelRecords) {
       const km = Number(s[i].odometer) - Number(s[i - 1].odometer);
       const liters = Number(s[i].liters || 0);
       const kmPerLiter = liters > 0 ? km / liters : 0;
-      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter });
+      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter, driver: s[i].driver || "" });
     }
   });
   return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -1655,15 +1661,19 @@ function computePerFillConsumption(fuelRecords) {
 function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   const [fuelFrom, setFuelFrom] = useState("");
   const [fuelTo, setFuelTo] = useState("");
+  const [fuelDriver, setFuelDriver] = useState("");
   const [kmFrom, setKmFrom] = useState("");
   const [kmTo, setKmTo] = useState("");
 
   const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords), [fuelRecords]);
 
   const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
+  const driverOptions = useMemo(() =>
+    [...new Set(perFillAll.map(r => r.driver).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [perFillAll]);
   const perFill = useMemo(() => perFillAll.filter(r =>
-    (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo)
-  ), [perFillAll, fuelFrom, fuelTo]);
+    (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelDriver || r.driver === fuelDriver)
+  ), [perFillAll, fuelFrom, fuelTo, fuelDriver]);
 
   const dailyByPlateAll = useMemo(() => {
     const byPlate = {};
@@ -1695,8 +1705,8 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
     download("تقرير_استهلاك_الوقود.csv", "\uFEFF" + header + rows);
   }
   function exportPerFillCsv() {
-    const header = "العربية,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
-    const rows = perFill.map(r => `${r.plate},${r.date},${r.prevOdometer},${r.odometer},${r.km},${r.liters},${r.kmPerLiter.toFixed(2)}`).join("\n");
+    const header = "العربية,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
+    const rows = perFill.map(r => `${r.plate},${r.driver || ""},${r.date},${r.prevOdometer},${r.odometer},${r.km},${r.liters},${r.kmPerLiter.toFixed(2)}`).join("\n");
     download("تقرير_كل_تعبئة_وقود.csv", "\uFEFF" + header + rows);
   }
   function exportDailyCsv() {
@@ -1715,8 +1725,8 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   function exportPerFillPdf() {
     exportTableToPdf(
       "تقرير كل تعبئة وقود لوحدها",
-      ["العربية", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
-      perFill.map(r => [r.plate, r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
+      ["العربية", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
+      perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
       "تقرير_كل_تعبئة_وقود.pdf"
     );
   }
@@ -1768,11 +1778,16 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
             <button onClick={exportPerFillPdf} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <input type="date" value={fuelFrom} onChange={e => setFuelFrom(e.target.value)} placeholder="من تاريخ"
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={fuelTo} onChange={e => setFuelTo(e.target.value)} placeholder="إلى تاريخ"
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <select value={fuelDriver} onChange={e => setFuelDriver(e.target.value)}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+            <option value="">كل السائقين</option>
+            {driverOptions.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
         </div>
         {perFill.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
@@ -1783,7 +1798,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {r.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date} · {r.km} كم · {r.liters} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} كم · {r.liters} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} كم/لتر</span>
                 </div>
               );
@@ -1881,6 +1896,18 @@ async function commitOpsChunked(ops) {
     });
     await batch.commit();
   }
+}
+
+// سجل تدقيق بسيط لعمليات الأدمن الحساسة (إنشاء/حذف حساب، تفعيل/تعطيل،
+// تغيير صلاحيات). كل سطر بيتسجل لوحده كـ document منفصل، من غير ما
+// يعطّل العملية الأساسية لو الكتابة فشلت لأي سبب.
+function logAudit(currentUser, action, details) {
+  try {
+    const id = String(Date.now()) + "_" + Math.random().toString(36).slice(2, 8);
+    db.collection("etronic_data_v2").doc("etronic_audit_log").collection("items").doc(id).set({
+      id, action, details: details || "", by: currentUser?.email || "غير معروف", at: new Date().toISOString(),
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 // يخزّن كل سجل كـ document منفصل بدل مصفوفة واحدة ضخمة في document واحد.
@@ -2023,6 +2050,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
   const [odometerLogs, setOdometerLogs, odometerReady] = useFirestoreCollection("etronic_odometer", () => []);
   const [customerLocations, setCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}));
   const [accounts, setAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email");
+  const [auditLog] = useFirestoreCollection("etronic_audit_log", () => []);
   const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
 
   const RESTRICTED_KEYS = ["reports", "vehicles", "employees", "customers"];
@@ -2051,7 +2079,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                   : tab === "settings"
                     ? { currentUser: user }
                     : tab === "admin"
-                      ? { accounts, setAccounts, currentUser: user }
+                      ? { accounts, setAccounts, currentUser: user, auditLog }
                       : tab === "dash"
                         ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles }
                         : {};
@@ -2150,7 +2178,7 @@ const PERMISSION_OPTIONS = [
   { key: "customers", label: "العملاء" },
 ];
 
-function AdminTab({ accounts, setAccounts, currentUser }) {
+function AdminTab({ accounts, setAccounts, currentUser, auditLog }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState("");
@@ -2161,6 +2189,7 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
   const [changingPw, setChangingPw] = useState(false);
 
   const [expandedEmail, setExpandedEmail] = useState(null);
+  const [showLog, setShowLog] = useState(false);
 
   function createAccount() {
     if (!form.name || !form.email || !form.password) return;
@@ -2178,17 +2207,21 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
       .then(() => {
         secondaryAuth.signOut();
         setAccounts([...accounts, { email: cleanEmail, name: form.name, role: "employee", active: true, permissions: [] }]);
+        logAudit(currentUser, "إنشاء حساب", `${form.name} (${cleanEmail})`);
         setForm({ name: "", email: "", password: "" });
       })
       .catch(e => setErr("مقدرناش ننشئ الحساب: " + e.message))
       .finally(() => setCreating(false));
   }
   function toggleActive(email) {
+    const acc = accounts.find(a => a.email === email);
     setAccounts(accounts.map(a => a.email === email ? { ...a, active: !a.active } : a));
+    logAudit(currentUser, acc && acc.active ? "تعطيل حساب" : "تفعيل حساب", email);
   }
   function deleteAccount(email, name) {
     if (!confirm(`متأكد إنك عايز تحذف حساب "${name}" نهائيًا؟ الحذف ده نهائي ومش هترجع فيه.`)) return;
     setAccounts(accounts.filter(a => a.email !== email));
+    logAudit(currentUser, "حذف حساب", `${name} (${email})`);
   }
   function togglePermission(email, key) {
     setAccounts(accounts.map(a => {
@@ -2197,6 +2230,7 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
       const has = perms.includes(key);
       return { ...a, permissions: has ? perms.filter(p => p !== key) : [...perms, key] };
     }));
+    logAudit(currentUser, "تغيير صلاحيات", `${email} — ${key}`);
   }
   async function changePassword() {
     if (!pwForm.current || !pwForm.next) return;
@@ -2314,6 +2348,30 @@ function AdminTab({ accounts, setAccounts, currentUser }) {
       </div>
       <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>* "إيقاف الحساب" بيمنع الموظف من الدخول للنظام فورًا بشكل مؤقت وممكن ترجعه تاني. "حذف نهائي" بيشيل الحساب من قايمة حسابات النظام خالص فيبقى مينفعش يدخل خالص — لكن ملاحظة: بيانات تسجيل الدخول (الإيميل وكلمة المرور) بتفضل موجودة في Firebase من غير ما تتحذف فعليًا (ده محتاج وصول لإعدادات Firebase مباشرة لحذفه بالكامل)، فلو حبيت تمنعه فعليًا من عمل حساب تاني بنفس الإيميل، محتاج تتواصل معايا لحذفه من Firebase Console كمان.</p>
       <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>* الصلاحيات المفتوحة بتدّي المستخدم حق المشاهدة بس للتاب ده، مش حق الإضافة أو الحذف.</p>
+
+      <div className="rounded-2xl p-4 mt-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <button onClick={() => setShowLog(!showLog)} className="flex items-center justify-between w-full">
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>سجل النشاط (آخر العمليات الحساسة)</h3>
+          <span className="font-ui text-xs" style={{ color: C.muted }}>{showLog ? "إخفاء ▲" : "إظهار ▼"}</span>
+        </button>
+        {showLog && (
+          (auditLog || []).length === 0 ? (
+            <p className="font-ui text-xs mt-3" style={{ color: C.muted }}>لسه مفيش عمليات مسجّلة.</p>
+          ) : (
+            <div className="space-y-2 mt-3">
+              {[...(auditLog || [])].sort((a, b) => (b.at || "").localeCompare(a.at || "")).slice(0, 50).map(entry => (
+                <div key={entry.id} className="rounded-xl p-2.5" style={{ background: C.surface2 }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-ui text-xs font-semibold" style={{ color: C.text }}>{entry.action}</span>
+                    <span className="font-mono text-[10px]" style={{ color: C.muted }}>{(entry.at || "").replace("T", " ").slice(0, 16)}</span>
+                  </div>
+                  <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>{entry.details} — بواسطة {entry.by}</p>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
 }
