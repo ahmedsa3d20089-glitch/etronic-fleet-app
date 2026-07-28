@@ -287,7 +287,13 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   );
 }
 
-function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
+function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
+  const STATUS_LABELS = {
+    "نشطة": { ar: "نشطة", en: "Active" },
+    "تحت الصيانة": { ar: "تحت الصيانة", en: "In maintenance" },
+    "متوقفة": { ar: "متوقفة", en: "Out of service" },
+  };
   const [q, setQ] = useState("");
   const [form, setForm] = useState({ plate: "", model: "", status: "نشطة" });
   const filtered = vehicles.filter(v => v.plate.includes(q));
@@ -298,37 +304,37 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
     setForm({ plate: "", model: "", status: "نشطة" });
   }
   function removeVehicle(id) {
-    if (!confirm("متأكد إنك عايز تمسح السيارة دي؟")) return;
+    if (!confirm(tr("متأكد إنك عايز تمسح السيارة دي؟", "Are you sure you want to delete this vehicle?"))) return;
     setVehicles(vehicles.filter(v => v.id !== id));
   }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الأسطول ({vehicles.length} سيارة)</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الأسطول (${vehicles.length} سيارة)`, `Fleet (${vehicles.length} vehicles)`)}</h2>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة سيارة جديدة</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة سيارة جديدة", "Add a new vehicle")}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <input placeholder="رقم السيارة" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+            <input placeholder={tr("رقم السيارة", "Plate number")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="الموديل (اختياري)" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
+            <input placeholder={tr("الموديل (اختياري)", "Model (optional)")} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-              <option value="نشطة">نشطة</option>
-              <option value="تحت الصيانة">تحت الصيانة</option>
-              <option value="متوقفة">متوقفة</option>
+              <option value="نشطة">{STATUS_LABELS["نشطة"][lang === "en" ? "en" : "ar"]}</option>
+              <option value="تحت الصيانة">{STATUS_LABELS["تحت الصيانة"][lang === "en" ? "en" : "ar"]}</option>
+              <option value="متوقفة">{STATUS_LABELS["متوقفة"][lang === "en" ? "en" : "ar"]}</option>
             </select>
           </div>
           <button onClick={addVehicle} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.amber}22`, color: C.amber }}>
-            <Plus size={14} /> إضافة
+            <Plus size={14} /> {tr("إضافة", "Add")}
           </button>
         </div>
       )}
 
-      <SearchBox value={q} onChange={setQ} placeholder="دور برقم السيارة..." />
+      <SearchBox value={q} onChange={setQ} placeholder={tr("دور برقم السيارة...", "Search by plate number...")} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {filtered.map(v => (
           <div key={v.id} className="rounded-2xl p-4 relative" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -341,8 +347,10 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
               )}
             </div>
             <p className="font-mono text-lg font-bold mt-2" style={{ color: C.text }}>{v.plate}</p>
-            <p className="font-ui text-xs mt-1" style={{ color: C.muted }}>{v.model || "بدون موديل"}</p>
-            <p className="font-ui text-[11px] mt-1" style={{ color: v.status === "نشطة" ? C.teal : v.status === "تحت الصيانة" ? C.amber : C.red }}>{v.status || "نشطة"}</p>
+            <p className="font-ui text-xs mt-1" style={{ color: C.muted }}>{v.model || tr("بدون موديل", "No model")}</p>
+            <p className="font-ui text-[11px] mt-1" style={{ color: v.status === "نشطة" ? C.teal : v.status === "تحت الصيانة" ? C.amber : C.red }}>
+              {(STATUS_LABELS[v.status] && STATUS_LABELS[v.status][lang === "en" ? "en" : "ar"]) || STATUS_LABELS["نشطة"][lang === "en" ? "en" : "ar"]}
+            </p>
           </div>
         ))}
       </div>
@@ -350,7 +358,8 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
   );
 }
 
-function EmployeesTab({ employees, setEmployees, isAdmin }) {
+function EmployeesTab({ employees, setEmployees, isAdmin, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [form, setForm] = useState({ name: "", code: "", position: "", department: "", phone: "" });
@@ -368,7 +377,7 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
     setPage(1);
   }
   function removeEmployee(id) {
-    if (!confirm("متأكد إنك عايز تمسح الموظف ده؟")) return;
+    if (!confirm(tr("متأكد إنك عايز تمسح الموظف ده؟", "Are you sure you want to delete this employee?"))) return;
     setEmployees(employees.filter(e => e.id !== id));
   }
   function startEdit(e) {
@@ -387,49 +396,49 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الموظفين ({employees.length})</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الموظفين (${employees.length})`, `Employees (${employees.length})`)}</h2>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة موظف جديد</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة موظف جديد", "Add a new employee")}</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <input placeholder="الاسم" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            <input placeholder={tr("الاسم", "Name")} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
               className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="الكود" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
+            <input placeholder={tr("الكود", "Code")} value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="الوظيفة" value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}
+            <input placeholder={tr("الوظيفة", "Position")} value={form.position} onChange={e => setForm({ ...form, position: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="القسم" value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}
+            <input placeholder={tr("القسم", "Department")} value={form.department} onChange={e => setForm({ ...form, department: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="التليفون" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+            <input placeholder={tr("التليفون", "Phone")} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           </div>
           <button onClick={addEmployee} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.amber}22`, color: C.amber }}>
-            <Plus size={14} /> إضافة
+            <Plus size={14} /> {tr("إضافة", "Add")}
           </button>
         </div>
       )}
 
-      <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود..." />
+      <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={tr("دور بالاسم أو الكود...", "Search by name or code...")} />
       <div className="space-y-2">
         {paged.map(e => editingId === e.id ? (
           <div key={e.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <input placeholder="الاسم" value={editForm.name} onChange={ev => setEditForm({ ...editForm, name: ev.target.value })}
+              <input placeholder={tr("الاسم", "Name")} value={editForm.name} onChange={ev => setEditForm({ ...editForm, name: ev.target.value })}
                 className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-              <input placeholder="الكود" value={editForm.code} onChange={ev => setEditForm({ ...editForm, code: ev.target.value })}
+              <input placeholder={tr("الكود", "Code")} value={editForm.code} onChange={ev => setEditForm({ ...editForm, code: ev.target.value })}
                 className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-              <input placeholder="الوظيفة" value={editForm.position} onChange={ev => setEditForm({ ...editForm, position: ev.target.value })}
+              <input placeholder={tr("الوظيفة", "Position")} value={editForm.position} onChange={ev => setEditForm({ ...editForm, position: ev.target.value })}
                 className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-              <input placeholder="القسم" value={editForm.department} onChange={ev => setEditForm({ ...editForm, department: ev.target.value })}
+              <input placeholder={tr("القسم", "Department")} value={editForm.department} onChange={ev => setEditForm({ ...editForm, department: ev.target.value })}
                 className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-              <input placeholder="التليفون" value={editForm.phone} onChange={ev => setEditForm({ ...editForm, phone: ev.target.value })}
+              <input placeholder={tr("التليفون", "Phone")} value={editForm.phone} onChange={ev => setEditForm({ ...editForm, phone: ev.target.value })}
                 className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
-              <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+              <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+              <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
             </div>
           </div>
         ) : (
@@ -502,7 +511,8 @@ function openInGoogleMaps(loc, fallbackParts) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
 }
 
-function CustomersTab({ customers, setCustomers, customerLocations, setCustomerLocations, isAdmin }) {
+function CustomersTab({ customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [savingUid, setSavingUid] = useState(null);
@@ -537,7 +547,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
     setPage(1);
   }
   function removeCustomer(id) {
-    if (!confirm("متأكد إنك عايز تمسح العميل ده؟")) return;
+    if (!confirm(tr("متأكد إنك عايز تمسح العميل ده؟", "Are you sure you want to delete this customer?"))) return;
     setCustomers(customers.filter(c => c.id !== id));
     setCustomerLocations(prev => {
       const next = { ...prev };
@@ -547,7 +557,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
   }
   function saveLocation(uid) {
     if (!navigator.geolocation) {
-      alert("المتصفح ده مش بيدعم تحديد الموقع");
+      alert(tr("المتصفح ده مش بيدعم تحديد الموقع", "This browser doesn't support location detection"));
       return;
     }
     setSavingUid(uid);
@@ -560,7 +570,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
         setSavingUid(null);
       },
       (err) => {
-        alert("مقدرناش نحدد موقعك: " + err.message + " — جرب تحفظه يدوي بدل كده");
+        alert(tr("مقدرناش نحدد موقعك: ", "Couldn't get your location: ") + err.message + tr(" — جرب تحفظه يدوي بدل كده", " — try saving it manually instead"));
         setSavingUid(null);
       },
       { enableHighAccuracy: true, timeout: 12000 }
@@ -585,7 +595,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
     const parsed = await resolveMapsLink(linkInput.trim());
     setResolvingLink(false);
     if (!parsed) {
-      alert("مقدرناش نلاقي إحداثيات في الرابط ده. جرب تنسخ الرابط تاني من Google Maps بعد ما تحدد نقطة على الخريطة، أو استخدم الإدخال اليدوي تحت");
+      alert(tr("مقدرناش نلاقي إحداثيات في الرابط ده. جرب تنسخ الرابط تاني من Google Maps بعد ما تحدد نقطة على الخريطة، أو استخدم الإدخال اليدوي تحت", "Couldn't find coordinates in this link. Try copying the link again from Google Maps after pinning a location, or use the manual entry below"));
       return;
     }
     setCustomerLocations(prev => ({ ...prev, [uid]: { ...parsed, savedAt: new Date().toISOString() } }));
@@ -594,7 +604,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
   function saveManual(uid) {
     const lat = parseFloat(latInput), lng = parseFloat(lngInput);
     if (isNaN(lat) || isNaN(lng)) {
-      alert("اكتب خط العرض وخط الطول كأرقام صحيحة");
+      alert(tr("اكتب خط العرض وخط الطول كأرقام صحيحة", "Enter latitude and longitude as valid numbers"));
       return;
     }
     setCustomerLocations(prev => ({ ...prev, [uid]: { lat, lng, savedAt: new Date().toISOString() } }));
@@ -611,50 +621,50 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>العملاء ({customers.length})</h2>
-      <p className="font-ui text-xs mb-4" style={{ color: C.muted }}>احفظ الموقع وانت عند العميل بزرار GPS، أو ضيفه من بعيد من رابط Google Maps أو بالإحداثيات مباشرة</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr(`العملاء (${customers.length})`, `Customers (${customers.length})`)}</h2>
+      <p className="font-ui text-xs mb-4" style={{ color: C.muted }}>{tr("احفظ الموقع وانت عند العميل بزرار GPS، أو ضيفه من بعيد من رابط Google Maps أو بالإحداثيات مباشرة", "Save the location while you're at the customer using the GPS button, or add it remotely via a Google Maps link or coordinates")}</p>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عميل جديد</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة عميل جديد", "Add a new customer")}</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            <input placeholder="الاسم" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            <input placeholder={tr("الاسم", "Name")} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
               className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="الكود" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
+            <input placeholder={tr("الكود", "Code")} value={form.code} onChange={e => setForm({ ...form, code: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="الإقليم" value={form.territory} onChange={e => setForm({ ...form, territory: e.target.value })}
+            <input placeholder={tr("الإقليم", "Territory")} value={form.territory} onChange={e => setForm({ ...form, territory: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="المحافظة" value={form.governorate} onChange={e => setForm({ ...form, governorate: e.target.value })}
+            <input placeholder={tr("المحافظة", "Governorate")} value={form.governorate} onChange={e => setForm({ ...form, governorate: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-            <input placeholder="المدينة" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+            <input placeholder={tr("المدينة", "City")} value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           </div>
           <button onClick={addCustomer} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.amber}22`, color: C.amber }}>
-            <Plus size={14} /> إضافة
+            <Plus size={14} /> {tr("إضافة", "Add")}
           </button>
         </div>
       )}
 
-      <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود أو الإقليم..." />
+      <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={tr("دور بالاسم أو الكود أو الإقليم...", "Search by name, code, or territory...")} />
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <select value={filterTerritory} onChange={e => { setFilterTerritory(e.target.value); setPage(1); }}
           className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-          <option value="">كل الأقاليم</option>
+          <option value="">{tr("كل الأقاليم", "All territories")}</option>
           {territoryOptions.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={filterGovernorate} onChange={e => { setFilterGovernorate(e.target.value); setPage(1); }}
           className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-          <option value="">كل المحافظات</option>
+          <option value="">{tr("كل المحافظات", "All governorates")}</option>
           {governorateOptions.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
         {(filterTerritory || filterGovernorate) && (
           <button onClick={() => { setFilterTerritory(""); setFilterGovernorate(""); setPage(1); }}
             className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>
-            مسح الفلاتر
+            {tr("مسح الفلاتر", "Clear filters")}
           </button>
         )}
-        <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} نتيجة</span>
+        <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("نتيجة", "results")}</span>
       </div>
       <div className="space-y-2">
         {paged.map((c) => {
@@ -665,34 +675,34 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
               <div className="flex items-center gap-3 p-3">
                 <button onClick={() => openInGoogleMaps(loc, [c.name, c.territory, c.governorate, c.city])}
                   className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: loc ? `${C.teal}22` : `${C.amber}22` }}
-                  title="افتح في خرائط جوجل">
+                  title={tr("افتح في خرائط جوجل", "Open in Google Maps")}>
                   <MapPin size={14} color={loc ? C.teal : C.amber} />
                 </button>
                 <div className="flex-1 min-w-0" onClick={() => openEditor(c.uid)}>
-                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{c.name || "بدون اسم"}</p>
+                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{c.name || tr("بدون اسم", "No name")}</p>
                   <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{[c.territory, c.governorate, c.city].filter(Boolean).join(" · ")}</p>
                   {loc && <p className="font-mono text-[10px] mt-0.5" style={{ color: C.teal }}>📍 {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}</p>}
                 </div>
                 <span className="font-mono text-[11px] shrink-0" style={{ color: C.muted }}>{c.code}</span>
                 {loc && isAdmin && (
-                  <button onClick={() => clearLocation(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="امسح الموقع المحفوظ">
+                  <button onClick={() => clearLocation(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title={tr("امسح الموقع المحفوظ", "Clear saved location")}>
                     <Trash2 size={13} color={C.red} />
                   </button>
                 )}
                 <button onClick={() => openEditor(c.uid)}
                   className="flex items-center gap-1 px-2 py-1.5 rounded-lg font-ui text-[10px] font-semibold shrink-0"
                   style={{ background: `${C.amber}22`, color: C.amber }}>
-                  {editing ? "قفل" : (loc ? "عدّل" : "ضيف موقع")}
+                  {editing ? tr("قفل", "Close") : (loc ? tr("عدّل", "Edit") : tr("ضيف موقع", "Add location"))}
                 </button>
                 {isAdmin && (
                   <button onClick={() => openFieldsEditor(c)}
                     className="flex items-center gap-1 px-2 py-1.5 rounded-lg font-ui text-[10px] font-semibold shrink-0"
                     style={{ background: `${C.teal}22`, color: C.teal }}>
-                    {editFieldsUid === c.uid ? "قفل" : "تعديل البيانات"}
+                    {editFieldsUid === c.uid ? tr("قفل", "Close") : tr("تعديل البيانات", "Edit details")}
                   </button>
                 )}
                 {isAdmin && (
-                  <button onClick={() => removeCustomer(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title="امسح العميل">
+                  <button onClick={() => removeCustomer(c.uid)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }} title={tr("امسح العميل", "Delete customer")}>
                     <Trash2 size={13} color={C.red} />
                   </button>
                 )}
@@ -701,17 +711,17 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
               {isAdmin && editFieldsUid === c.uid && (
                 <div className="p-3 pt-0 space-y-2" style={{ borderTop: `1px solid ${C.border}` }}>
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    <input placeholder="الاسم" value={fieldsForm.name} onChange={e => setFieldsForm({ ...fieldsForm, name: e.target.value })}
+                    <input placeholder={tr("الاسم", "Name")} value={fieldsForm.name} onChange={e => setFieldsForm({ ...fieldsForm, name: e.target.value })}
                       className="col-span-2 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                    <input placeholder="الإقليم" value={fieldsForm.territory} onChange={e => setFieldsForm({ ...fieldsForm, territory: e.target.value })}
+                    <input placeholder={tr("الإقليم", "Territory")} value={fieldsForm.territory} onChange={e => setFieldsForm({ ...fieldsForm, territory: e.target.value })}
                       className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                    <input placeholder="المحافظة" value={fieldsForm.governorate} onChange={e => setFieldsForm({ ...fieldsForm, governorate: e.target.value })}
+                    <input placeholder={tr("المحافظة", "Governorate")} value={fieldsForm.governorate} onChange={e => setFieldsForm({ ...fieldsForm, governorate: e.target.value })}
                       className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                    <input placeholder="المدينة" value={fieldsForm.city} onChange={e => setFieldsForm({ ...fieldsForm, city: e.target.value })}
+                    <input placeholder={tr("المدينة", "City")} value={fieldsForm.city} onChange={e => setFieldsForm({ ...fieldsForm, city: e.target.value })}
                       className="col-span-2 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
                   </div>
                   <button onClick={() => saveFields(c.uid)} className="w-full px-3 py-2 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-                    حفظ البيانات
+                    {tr("حفظ البيانات", "Save details")}
                   </button>
                 </div>
               )}
@@ -721,26 +731,26 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
                   <button onClick={() => saveLocation(c.uid)} disabled={savingUid === c.uid}
                     className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
                     style={{ background: `${C.teal}22`, color: C.teal }}>
-                    <MapPin size={13} /> {savingUid === c.uid ? "بيحدد موقعك دلوقتي..." : "احفظ موقعي الحالي (لازم تكون عند العميل)"}
+                    <MapPin size={13} /> {savingUid === c.uid ? tr("بيحدد موقعك دلوقتي...", "Getting your location...") : tr("احفظ موقعي الحالي (لازم تكون عند العميل)", "Save my current location (you must be at the customer)")}
                   </button>
 
                   <div>
-                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>أو الصق رابط من Google Maps (افتح خرائط جوجل، دور على العميل، حدد النقطة، وانسخ الرابط)</p>
+                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>{tr("أو الصق رابط من Google Maps (افتح خرائط جوجل، دور على العميل، حدد النقطة، وانسخ الرابط)", "Or paste a Google Maps link (open Google Maps, find the customer, pin the location, and copy the link)")}</p>
                     <div className="flex gap-2">
                       <input value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="https://maps.google.com/..."
                         className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                      <button onClick={() => saveFromLink(c.uid)} disabled={resolvingLink} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0 disabled:opacity-50" style={{ background: `${C.amber}22`, color: C.amber }}>{resolvingLink ? "بيتحقق..." : "حفظ"}</button>
+                      <button onClick={() => saveFromLink(c.uid)} disabled={resolvingLink} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0 disabled:opacity-50" style={{ background: `${C.amber}22`, color: C.amber }}>{resolvingLink ? tr("بيتحقق...", "Checking...") : tr("حفظ", "Save")}</button>
                     </div>
                   </div>
 
                   <div>
-                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>أو دخّل الإحداثيات يدويًا</p>
+                    <p className="font-ui text-[11px] mb-1.5" style={{ color: C.muted }}>{tr("أو دخّل الإحداثيات يدويًا", "Or enter coordinates manually")}</p>
                     <div className="flex gap-2">
-                      <input type="number" step="any" value={latInput} onChange={e => setLatInput(e.target.value)} placeholder="خط العرض (lat)"
+                      <input type="number" step="any" value={latInput} onChange={e => setLatInput(e.target.value)} placeholder={tr("خط العرض (lat)", "Latitude")}
                         className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                      <input type="number" step="any" value={lngInput} onChange={e => setLngInput(e.target.value)} placeholder="خط الطول (lng)"
+                      <input type="number" step="any" value={lngInput} onChange={e => setLngInput(e.target.value)} placeholder={tr("خط الطول (lng)", "Longitude")}
                         className="flex-1 rounded-lg px-2 py-2 font-mono text-[11px] outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                      <button onClick={() => saveManual(c.uid)} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>حفظ</button>
+                      <button onClick={() => saveManual(c.uid)} className="px-3 rounded-lg font-ui text-xs font-semibold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}>{tr("حفظ", "Save")}</button>
                     </div>
                   </div>
                 </div>
@@ -1260,8 +1270,18 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
   );
 }
 
-function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLogs, isAdmin }) {
+function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
+  // القيم دي بتتخزن في البيانات نفسها، فمبتتغيرش حسب اللغة عشان ميحصلش
+  // تعارض مع بيانات قديمة متخزنة بالفعل — بس العرض للمستخدم بيتترجم
   const TYPES = ["صيانة دورية", "إصلاح عطل", "تغيير زيت", "إطارات", "أخرى"];
+  const TYPE_LABELS = {
+    "صيانة دورية": { ar: "صيانة دورية", en: "Routine maintenance" },
+    "إصلاح عطل": { ar: "إصلاح عطل", en: "Repair" },
+    "تغيير زيت": { ar: "تغيير زيت", en: "Oil change" },
+    "إطارات": { ar: "إطارات", en: "Tires" },
+    "أخرى": { ar: "أخرى", en: "Other" },
+  };
   const OIL_INTERVAL_KM = 2000;
   const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   const [page, setPage] = useState(1);
@@ -1300,71 +1320,73 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     setPage(1);
   }
   function removeRecord(id) {
-    if (!confirm("متأكد إنك عايز تمسح سجل الصيانة ده؟")) return;
+    if (!confirm(tr("متأكد إنك عايز تمسح سجل الصيانة ده؟", "Are you sure you want to delete this maintenance record?"))) return;
     setRecords(records.filter(r => r.id !== id));
   }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>الصيانة</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل أعمال الصيانة والإصلاحات لكل سيارة</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("الصيانة", "Maintenance")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل أعمال الصيانة والإصلاحات لكل سيارة", "Log maintenance and repair work for each vehicle")}</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
-        <KpiCard icon={Wrench} value={records.length} label="عدد أعمال الصيانة" color={C.teal} />
-        <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label="إجمالي التكلفة (ج.م)" color={C.red} />
-        <KpiCard icon={Calendar} value={upcoming} label="صيانات مجدولة قادمة" color={C.amber} />
-        <KpiCard icon={Wrench} value={oilAlerts.length} label="عربيات محتاجة تغيير زيت" color={oilAlerts.length ? C.red : C.teal} />
+        <KpiCard icon={Wrench} value={records.length} label={tr("عدد أعمال الصيانة", "Number of maintenance jobs")} color={C.teal} />
+        <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label={tr("إجمالي التكلفة (ج.م)", "Total cost (EGP)")} color={C.red} />
+        <KpiCard icon={Calendar} value={upcoming} label={tr("صيانات مجدولة قادمة", "Upcoming scheduled maintenance")} color={C.amber} />
+        <KpiCard icon={Wrench} value={oilAlerts.length} label={tr("سيارات محتاجة تغيير زيت", "Vehicles needing oil change")} color={oilAlerts.length ? C.red : C.teal} />
       </div>
 
       {oilAlerts.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.red }}>⚠ تنبيهات تغيير الزيت</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.red }}>⚠ {tr("تنبيهات تغيير الزيت", "Oil-change alerts")}</h3>
           <div className="space-y-2">
             {oilAlerts.map(a => (
               <div key={a.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {a.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {a.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
-                  {a.lastOilOdometer > 0 ? `آخر تغيير زيت عند ${a.lastOilOdometer} كم` : "مفيش تغيير زيت مسجل قبل كده"}
+                  {a.lastOilOdometer > 0 ? tr(`آخر تغيير زيت عند ${a.lastOilOdometer} كم`, `Last oil change at ${a.lastOilOdometer} km`) : tr("مفيش تغيير زيت مسجل قبل كده", "No oil change recorded yet")}
                 </span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.red }}>{a.kmSinceOil.toFixed(0)} كم من غير تغيير</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.red }}>{a.kmSinceOil.toFixed(0)} {tr("كم من غير تغيير", "km since last change")}</span>
               </div>
             ))}
           </div>
-          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* التنبيه بيظهر لما تعدي {OIL_INTERVAL_KM} كم من آخر تغيير زيت، بناءً على قراءة العداد المسجلة في تاب "قراءة العداد"</p>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+            {tr(`* التنبيه بيظهر لما تعدي ${OIL_INTERVAL_KM} كم من آخر تغيير زيت، بناءً على قراءة العداد المسجلة في تاب "قراءة العداد"`, `* This alert appears once ${OIL_INTERVAL_KM} km have passed since the last oil change, based on odometer readings logged in the "Odometer" tab`)}
+          </p>
         </div>
       )}
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عملية صيانة</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة عملية صيانة", "Add a maintenance job")}</h3>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">السيارة</option>
+            <option value="">{tr("السيارة", "Vehicle")}</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            {TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t][lang === "en" ? "en" : "ar"]}</option>)}
           </select>
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
+          <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="العداد عند الصيانة" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+          <input type="number" placeholder={tr("العداد عند الصيانة", "Odometer at service")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="date" placeholder="الصيانة القادمة" value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
+          <input type="date" placeholder={tr("الصيانة القادمة", "Next due date")} value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="text" placeholder="ملاحظات" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+          <input type="text" placeholder={tr("ملاحظات", "Notes")} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
             className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
         <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> إضافة
+          <Plus size={14} /> {tr("إضافة", "Add")}
         </button>
       </div>
 
       {sorted.length === 0 ? (
-        <EmptyState text="لسه مفيش أعمال صيانة مسجلة. ضيف أول عملية من الفورم فوق." />
+        <EmptyState text={tr("لسه مفيش أعمال صيانة مسجلة. ضيف أول عملية من الفورم فوق.", "No maintenance jobs recorded yet. Add the first one from the form above.")} />
       ) : (
         <>
           <div className="space-y-2">
@@ -1374,12 +1396,12 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
                   <Wrench size={14} color={C.amber} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>سيارة {r.plate} · {r.type}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate} · {(TYPE_LABELS[r.type] && TYPE_LABELS[r.type][lang === "en" ? "en" : "ar"]) || r.type}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>
-                    {r.date}{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.nextDue ? ` · القادمة ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
+                    {r.date}{r.odometer ? ` · ${tr("عداد", "odometer")} ${r.odometer}` : ""}{r.nextDue ? ` · ${tr("القادمة", "next")} ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
                   </p>
                 </div>
-                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} {tr("ج.م", "EGP")}</span>
                 {(r.type !== "تغيير زيت" || isAdmin) && (
                   <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                     <Trash2 size={13} color={C.red} />
@@ -1620,7 +1642,8 @@ function parseOdometerText(text) {
   return nums.sort((a, b) => b.length - a.length)[0];
 }
 
-function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
+function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const [form, setForm] = useState({ plate: "", date: "", odometer: "" });
   const [page, setPage] = useState(1);
   const [photoData, setPhotoData] = useState(null);
@@ -1647,12 +1670,12 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       const odometer = parseOdometerText(text);
       if (odometer) {
         setForm(prev => ({ ...prev, odometer }));
-        setScanNote("✓ اتقرت القراءة من الصورة — راجعها قبل ما تضيف");
+        setScanNote(tr("✓ اتقرت القراءة من الصورة — راجعها قبل ما تضيف", "✓ Reading extracted from photo — review before adding"));
       } else {
-        setScanNote("مقدرناش نقرا رقم العداد من الصورة، دخّله يدويًا");
+        setScanNote(tr("مقدرناش نقرا رقم العداد من الصورة، دخّله يدويًا", "Couldn't read the odometer number from the photo, enter it manually"));
       }
     } catch (err) {
-      setScanNote("حصل خطأ في القراءة الأوتوماتيكية: " + err.message);
+      setScanNote(tr("حصل خطأ في القراءة الأوتوماتيكية: ", "Auto-reading error: ") + err.message);
     } finally {
       setScanning(false);
     }
@@ -1665,7 +1688,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       String(l.odometer) === String(form.odometer)
     );
     if (isDuplicate) {
-      alert("البيانات دي سبق تسجيلها — نفس السيارة والتاريخ وقراءة العداد موجودين قبل كده");
+      alert(tr("البيانات دي سبق تسجيلها — نفس السيارة والتاريخ وقراءة العداد موجودين قبل كده", "This entry already exists — same vehicle, date, and odometer reading were already recorded"));
       return;
     }
     const platesLogs = logs.filter(l => l.plate === form.plate);
@@ -1673,7 +1696,10 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       const lastOdo = Math.max(...platesLogs.map(l => Number(l.odometer) || 0));
       const diff = Number(form.odometer) - lastOdo;
       if (diff < 0 || diff > 3000) {
-        const ok = confirm(`القراءة دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجلة لنفس السيارة (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
+        const ok = confirm(tr(
+          `القراءة دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجلة لنفس السيارة (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`,
+          `This reading (${form.odometer} km) is ${diff < 0 ? "lower than" : "very different from"} the last recorded reading for this vehicle (${lastOdo} km). This could be a typo or a scanning error. Save it anyway?`
+        ));
         if (!ok) return;
       }
     }
@@ -1684,7 +1710,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
     setPage(1);
   }
   function removeLog(id) {
-    if (!confirm("متأكد إنك عايز تمسح قراءة العداد دي؟")) return;
+    if (!confirm(tr("متأكد إنك عايز تمسح قراءة العداد دي؟", "Are you sure you want to delete this odometer reading?"))) return;
     setLogs(logs.filter(l => l.id !== id));
   }
   function startEdit(l) {
@@ -1703,46 +1729,46 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>قراءة العداد</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل قراءة عداد كل سيارة بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("قراءة العداد", "Odometer")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل قراءة عداد كل سيارة بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة قراءة</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
 
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-            📷 صوّر العداد
+            📷 {tr("صوّر العداد", "Scan odometer")}
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
           </label>
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
-            🖼️ اختر من الصور
+            🖼️ {tr("اختر من الصور", "Choose from photos")}
             <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
           </label>
-          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>بيقرا الصورة...</span>}
-          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ الصورة اتحفظت</span>}
+          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
+          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
         </div>
         {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">السيارة</option>
+            <option value="">{tr("السيارة", "Vehicle")}</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="قراءة العداد" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+          <input type="number" placeholder={tr("قراءة العداد", "Odometer reading")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
-        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>هيتسجل باسم المستخدم: {currentUser?.email}</p>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
         <button onClick={addLog} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> إضافة
+          <Plus size={14} /> {tr("إضافة", "Add")}
         </button>
       </div>
 
       {sorted.length === 0 ? (
-        <EmptyState text="لسه مفيش قراءات مسجلة." />
+        <EmptyState text={tr("لسه مفيش قراءات مسجلة.", "No readings recorded yet.")} />
       ) : (
         <>
           <div className="space-y-2">
@@ -1755,12 +1781,12 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
                   </select>
                   <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
                     className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                  <input type="number" placeholder="قراءة العداد" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                  <input type="number" placeholder={tr("قراءة العداد", "Odometer reading")} value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
                     className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
-                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
                 </div>
               </div>
             ) : (
@@ -1769,11 +1795,11 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
                   <Truck size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>سيارة {l.plate}</p>
-                  <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}{l.enteredBy ? ` · بواسطة ${l.enteredBy}` : ""}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {l.plate}</p>
+                  <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}{l.enteredBy ? ` · ${tr("بواسطة", "by")} ${l.enteredBy}` : ""}</p>
                 </div>
-                {l.photo && <img src={l.photo} alt="عداد" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
-                <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} كم</span>
+                {l.photo && <img src={l.photo} alt={tr("عداد", "odometer")} className="w-9 h-9 rounded-lg object-cover shrink-0" />}
+                <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} {tr("كم", "km")}</span>
                 <button onClick={() => startEdit(l)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
                   <Edit size={13} color={C.teal} />
                 </button>
@@ -1813,7 +1839,8 @@ function computePerFillConsumption(fuelRecords) {
   return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
-function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
+function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const [fuelFrom, setFuelFrom] = useState("");
   const [fuelTo, setFuelTo] = useState("");
   const [fuelDriver, setFuelDriver] = useState("");
@@ -1829,10 +1856,15 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   const perFill = useMemo(() => perFillAll.filter(r =>
     (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelDriver || r.driver === fuelDriver)
   ), [perFillAll, fuelFrom, fuelTo, fuelDriver]);
-  const perFillTotals = useMemo(() => ({
-    cost: perFill.reduce((sum, r) => sum + (Number(r.cost) || 0), 0),
-    km: perFill.reduce((sum, r) => sum + (Number(r.km) || 0), 0),
-  }), [perFill]);
+  const perFillTotalsByPlate = useMemo(() => {
+    const byPlate = {};
+    perFill.forEach(r => {
+      if (!byPlate[r.plate]) byPlate[r.plate] = { plate: r.plate, cost: 0, km: 0 };
+      byPlate[r.plate].cost += Number(r.cost) || 0;
+      byPlate[r.plate].km += Number(r.km) || 0;
+    });
+    return Object.values(byPlate).sort((a, b) => a.plate.localeCompare(b.plate));
+  }, [perFill]);
 
   const dailyByPlateAll = useMemo(() => {
     const byPlate = {};
@@ -1857,72 +1889,78 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
     (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
   ), [dailyByPlateAll, kmFrom, kmTo]);
-  const dailyKmTotal = useMemo(() => dailyByPlate.reduce((sum, r) => sum + (Number(r.km) || 0), 0), [dailyByPlate]);
+  const dailyKmTotalByPlate = useMemo(() => {
+    const byPlate = {};
+    dailyByPlate.forEach(r => {
+      byPlate[r.plate] = (byPlate[r.plate] || 0) + (Number(r.km) || 0);
+    });
+    return Object.entries(byPlate).map(([plate, km]) => ({ plate, km })).sort((a, b) => a.plate.localeCompare(b.plate));
+  }, [dailyByPlate]);
 
   function exportConsumptionCsv() {
-    const header = "السيارة,الكيلومترات,اللترات,كم/لتر\n";
+    const header = tr("السيارة,الكيلومترات,اللترات,كم/لتر\n", "Vehicle,Km,Liters,Km/L\n");
     const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)}`).join("\n");
-    download("تقرير_استهلاك_الوقود.csv", "\uFEFF" + header + rows);
+    download(tr("تقرير_استهلاك_الوقود.csv", "fuel_consumption_report.csv"), "\uFEFF" + header + rows);
   }
   function exportPerFillCsv() {
-    const header = "السيارة,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
+    const header = tr("السيارة,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n", "Vehicle,Driver,Date,Previous odometer,Current odometer,Km,Liters,Km/L\n");
     const rows = perFill.map(r => `${r.plate},${r.driver || ""},${r.date},${r.prevOdometer},${r.odometer},${r.km},${r.liters},${r.kmPerLiter.toFixed(2)}`).join("\n");
-    download("تقرير_كل_تعبئة_وقود.csv", "\uFEFF" + header + rows);
+    download(tr("تقرير_كل_تعبئة_وقود.csv", "per_fillup_report.csv"), "\uFEFF" + header + rows);
   }
   function exportDailyCsv() {
-    const header = "السيارة,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n";
+    const header = tr("السيارة,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n", "Vehicle,From,To,Km driven,Daily average\n");
     const rows = dailyByPlate.map(r => `${r.plate},${r.from},${r.to},${r.km},${r.avgPerDay.toFixed(1)}`).join("\n");
-    download("تقرير_الكيلومترات_اليومية.csv", "\uFEFF" + header + rows);
+    download(tr("تقرير_الكيلومترات_اليومية.csv", "daily_km_report.csv"), "\uFEFF" + header + rows);
   }
   function exportConsumptionPdf() {
     exportTableToPdf(
-      "تقرير معدل استهلاك الوقود",
-      ["السيارة", "الكيلومترات", "اللترات", "كم/لتر"],
+      tr("تقرير معدل استهلاك الوقود", "Fuel consumption rate report"),
+      tr(["السيارة", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Km", "Liters", "Km/L"]),
       consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2)]),
-      "تقرير_استهلاك_الوقود.pdf"
+      tr("تقرير_استهلاك_الوقود.pdf", "fuel_consumption_report.pdf")
     );
   }
   function exportPerFillPdf() {
     exportTableToPdf(
-      "تقرير كل تعبئة وقود لوحدها",
-      ["السيارة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
+      tr("تقرير كل تعبئة وقود لوحدها", "Per fill-up fuel report"),
+      tr(["السيارة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L"]),
       perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
-      "تقرير_كل_تعبئة_وقود.pdf"
+      tr("تقرير_كل_تعبئة_وقود.pdf", "per_fillup_report.pdf")
     );
   }
   function exportDailyPdf() {
     exportTableToPdf(
-      "تقرير الكيلومترات اليومية",
-      ["السيارة", "من تاريخ", "إلى تاريخ", "كيلومترات مقطوعة", "متوسط يومي"],
+      tr("تقرير الكيلومترات اليومية", "Daily kilometers report"),
+      tr(["السيارة", "من تاريخ", "إلى تاريخ", "كيلومترات مقطوعة", "متوسط يومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]),
       dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)]),
-      "تقرير_الكيلومترات_اليومية.pdf"
+      tr("تقرير_الكيلومترات_اليومية.pdf", "daily_km_report.pdf")
     );
   }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>التقارير</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>معدل استهلاك الوقود والكيلومترات اليومية لكل سيارة</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير", "Reports")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("معدل استهلاك الوقود والكيلومترات اليومية لكل سيارة", "Fuel consumption rate and daily kilometers for each vehicle")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>معدل استهلاك الوقود (إجمالي لكل سيارة)</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("معدل استهلاك الوقود (إجمالي لكل سيارة)", "Fuel consumption rate (total per vehicle)")}</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportConsumptionCsv} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportConsumptionPdf} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
         {consumptionByPlate.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data yet — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
           <div className="space-y-2">
             {consumptionByPlate.map(v => {
               const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
                 <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {v.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
                 </div>
               );
             })}
@@ -1932,40 +1970,48 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>كل تعبئة وقود لوحدها</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("كل تعبئة وقود لوحدها", "Every fill-up individually")}</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportPerFillCsv} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportPerFillPdf} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <input type="date" value={fuelFrom} onChange={e => setFuelFrom(e.target.value)} placeholder="من تاريخ"
+          <input type="date" value={fuelFrom} onChange={e => setFuelFrom(e.target.value)} placeholder={tr("من تاريخ", "From")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="date" value={fuelTo} onChange={e => setFuelTo(e.target.value)} placeholder="إلى تاريخ"
+          <input type="date" value={fuelTo} onChange={e => setFuelTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <select value={fuelDriver} onChange={e => setFuelDriver(e.target.value)}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">كل السائقين</option>
+            <option value="">{tr("كل السائقين", "All drivers")}</option>
             {driverOptions.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         </div>
         {perFill.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough fill-ups in this period — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
           <>
-            <div className="rounded-xl p-2.5 mb-3 flex items-center gap-4 flex-wrap" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
-              <span className="font-ui text-xs font-semibold" style={{ color: C.text }}>إجمالي الفترة المختارة:</span>
-              <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{perFillTotals.cost.toFixed(2)} ج.م</span>
-              <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{perFillTotals.km.toFixed(0)} كم</span>
+            <div className="rounded-xl p-2.5 mb-3" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
+              <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("إجمالي كل سيارة لوحدها في الفترة المختارة:", "Total per vehicle for the selected period:")}</p>
+              <div className="flex flex-wrap gap-2">
+                {perFillTotalsByPlate.map(v => (
+                  <div key={v.plate} className="rounded-lg px-2.5 py-1.5" style={{ background: C.surface2 }}>
+                    <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}: </span>
+                    <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{v.cost.toFixed(2)} {tr("ج.م", "EGP")}</span>
+                    <span className="font-mono text-xs" style={{ color: C.muted }}> · </span>
+                    <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{v.km.toFixed(0)} {tr("كم", "km")}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
             {perFill.map((r, i) => {
               const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {r.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} كم · {r.liters} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} كم/لتر</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} {tr("كم", "km")} · {r.liters} {tr("لتر", "L")}{suspicious ? tr(" · ⚠ احتمال تلاعب", " · ⚠ possible tampering") : ""}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
                 </div>
               );
             })}
@@ -1976,32 +2022,39 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>الكيلومترات اليومية</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("الكيلومترات اليومية", "Daily kilometers")}</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportDailyCsv} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportDailyPdf} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
         <div className="flex items-center gap-2 mb-3">
-          <input type="date" value={kmFrom} onChange={e => setKmFrom(e.target.value)} placeholder="من تاريخ"
+          <input type="date" value={kmFrom} onChange={e => setKmFrom(e.target.value)} placeholder={tr("من تاريخ", "From")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="date" value={kmTo} onChange={e => setKmTo(e.target.value)} placeholder="إلى تاريخ"
+          <input type="date" value={kmTo} onChange={e => setKmTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
         {dailyByPlate.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"', 'Not enough data in this period — log odometer readings regularly from the "Odometer" tab')}</p>
         ) : (
           <>
-            <div className="rounded-xl p-2.5 mb-3 flex items-center gap-4 flex-wrap" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
-              <span className="font-ui text-xs font-semibold" style={{ color: C.text }}>إجمالي الكيلومترات للفترة المختارة:</span>
-              <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{dailyKmTotal.toFixed(0)} كم</span>
+            <div className="rounded-xl p-2.5 mb-3" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
+              <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("إجمالي الكيلومترات لكل سيارة لوحدها في الفترة المختارة:", "Total km per vehicle for the selected period:")}</p>
+              <div className="flex flex-wrap gap-2">
+                {dailyKmTotalByPlate.map(v => (
+                  <div key={v.plate} className="rounded-lg px-2.5 py-1.5" style={{ background: C.surface2 }}>
+                    <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}: </span>
+                    <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{v.km.toFixed(0)} {tr("كم", "km")}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
             {dailyByPlate.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {r.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.from} → {r.to}</span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{r.km} كم ({r.avgPerDay.toFixed(0)}/يوم)</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{r.km} {tr("كم", "km")} ({r.avgPerDay.toFixed(0)}/{tr("يوم", "day")})</span>
               </div>
             ))}
             </div>
