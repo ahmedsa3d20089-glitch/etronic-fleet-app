@@ -250,9 +250,9 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
           <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ تنبيهات:</span>
           {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} صيانة مجدولة فات ميعادها</span>}
           {overdueMaintenance > 0 && (oilAlertsCount > 0 || fuelAnomalyCount > 0) && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} عربية محتاجة تغيير زيت</span>}
+          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} سيارة محتاجة تغيير زيت</span>}
           {oilAlertsCount > 0 && fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} عربية معدل استهلاكها غير طبيعي الشهر ده</span>}
+          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} سيارة معدل استهلاكها غير طبيعي الشهر ده</span>}
           <span className="font-ui text-[11px]" style={{ color: C.muted }}>(التفاصيل في تابات "الصيانة" و"الوقود")</span>
         </div>
       )}
@@ -264,16 +264,16 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
       </div>
 
       <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>كيلومترات كل عربية على مدار الشهر الحالي</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>كيلومترات كل سيارة على مدار الشهر الحالي</h3>
         {kmChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل عربية من تاب "قراءة العداد"</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل سيارة من تاب "قراءة العداد"</p>
         ) : (
           <BarChart data={kmChartData} unit=" كم" />
         )}
       </div>
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل عربية على مدار الشهر الحالي (كم/لتر)</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل سيارة على مدار الشهر الحالي (كم/لتر)</h3>
         {fuelChartData.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
         ) : (
@@ -298,19 +298,19 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
     setForm({ plate: "", model: "", status: "نشطة" });
   }
   function removeVehicle(id) {
-    if (!confirm("متأكد إنك عايز تمسح العربية دي؟")) return;
+    if (!confirm("متأكد إنك عايز تمسح السيارة دي؟")) return;
     setVehicles(vehicles.filter(v => v.id !== id));
   }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الأسطول ({vehicles.length} عربية)</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الأسطول ({vehicles.length} سيارة)</h2>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عربية جديدة</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة سيارة جديدة</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <input placeholder="رقم العربية" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+            <input placeholder="رقم السيارة" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             <input placeholder="الموديل (اختياري)" value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -328,7 +328,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
         </div>
       )}
 
-      <SearchBox value={q} onChange={setQ} placeholder="دور برقم العربية..." />
+      <SearchBox value={q} onChange={setQ} placeholder="دور برقم السيارة..." />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {filtered.map(v => (
           <div key={v.id} className="rounded-2xl p-4 relative" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -978,7 +978,8 @@ function parseReceiptText(text, vehiclesList, employeesList) {
 
 const FUEL_PRICE_PER_LITER = 20.5;
 
-function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUser }) {
+function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUser, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const [form, setForm] = useState({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "", driverCode: "" });
   const [page, setPage] = useState(1);
   const [photoData, setPhotoData] = useState(null);
@@ -1053,7 +1054,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       Number(r.cost) === Number(form.cost)
     );
     if (isDuplicate) {
-      alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ والعداد واللتر والتكلفة موجودين قبل كده");
+      alert(tr("البيانات دي سبق تسجيلها — نفس السيارة والتاريخ والعداد واللتر والتكلفة موجودين قبل كده", "This entry already exists — same vehicle, date, odometer, liters, and cost were already recorded"));
       return;
     }
     if (form.odometer) {
@@ -1062,7 +1063,10 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
         const lastOdo = Math.max(...platesOdo);
         const diff = Number(form.odometer) - lastOdo;
         if (diff < 0 || diff > 3000) {
-          const ok = confirm(`قراءة العداد دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر عداد مسجل لنفس العربية (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
+          const ok = confirm(tr(
+            `قراءة العداد دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر عداد مسجل لنفس السيارة (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`,
+            `This odometer reading (${form.odometer} km) is ${diff < 0 ? "lower than" : "very different from"} the last recorded reading for this vehicle (${lastOdo} km). This could be a typo or a scanning error. Save it anyway?`
+          ));
           if (!ok) return;
         }
       }
@@ -1074,6 +1078,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
     setPage(1);
   }
   function removeRecord(id) {
+    if (!confirm(tr("متأكد إنك عايز تمسح عملية التعبئة دي؟", "Are you sure you want to delete this fuel entry?"))) return;
     setRecords(records.filter(r => r.id !== id));
   }
   function startEdit(r) {
@@ -1090,48 +1095,49 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
     setEditForm(null);
   }
   function exportCsv() {
-    const header = "التاريخ,العربية,السائق,لتر,التكلفة,العداد\n";
+    const header = tr("التاريخ,السيارة,السائق,لتر,التكلفة,العداد\n", "Date,Vehicle,Driver,Liters,Cost,Odometer\n");
     const rows = sorted.map(r => `${r.date},${r.plate},${r.driver || ""},${r.liters},${r.cost},${r.odometer || ""}`).join("\n");
-    download("تقرير_الوقود.csv", "\uFEFF" + header + rows);
+    download(tr("تقرير_الوقود.csv", "fuel_report.csv"), "\uFEFF" + header + rows);
   }
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>الوقود</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>صوّر الريسيت وهيتقرا أوتوماتيك، أو دخّل البيانات يدويًا</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("الوقود", "Fuel")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("صوّر الريسيت وهيتقرا أوتوماتيك، أو دخّل البيانات يدويًا", "Scan the receipt and it will be read automatically, or enter the details manually")}</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
-        <KpiCard icon={Fuel} value={records.length} label="عدد عمليات التعبئة" color={C.teal} />
-        <KpiCard icon={Fuel} value={totalLiters.toFixed(0)} label="إجمالي اللترات" color={C.amber} />
-        <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label="إجمالي التكلفة (ج.م)" color={C.red} />
-        <KpiCard icon={TrendingUp} value={avgPrice.toFixed(2)} label="متوسط سعر اللتر" color={C.teal} />
+        <KpiCard icon={Fuel} value={records.length} label={tr("عدد عمليات التعبئة", "Number of fill-ups")} color={C.teal} />
+        <KpiCard icon={Fuel} value={totalLiters.toFixed(0)} label={tr("إجمالي اللترات", "Total liters")} color={C.amber} />
+        <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label={tr("إجمالي التكلفة (ج.م)", "Total cost (EGP)")} color={C.red} />
+        <KpiCard icon={TrendingUp} value={avgPrice.toFixed(2)} label={tr("متوسط سعر اللتر", "Average price/liter")} color={C.teal} />
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة عملية تعبئة</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة عملية تعبئة", "Add a fill-up")}</h3>
 
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-            📷 صوّر الريسيت
+            📷 {tr("صوّر الريسيت", "Scan receipt")}
             <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
           </label>
           <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
-            🖼️ اختر من الصور
+            🖼️ {tr("اختر من الصور", "Choose from photos")}
             <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
           </label>
-          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>بيقرا الصورة...</span>}
-          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ الصورة اتحفظت</span>}
+          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
+          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
         </div>
         {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
 
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-          <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none"
-            style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
-            {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
-          </select>
-          <input type="text" placeholder="كود السائق" value={form.driverCode} onChange={e => {
+          <input type="text" placeholder={tr("رقم السيارة", "Vehicle plate")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+            list="fuel-vehicle-plates"
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none"
+            style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <datalist id="fuel-vehicle-plates">
+            {vehicles.map(v => <option key={v.plate} value={v.plate} />)}
+          </datalist>
+          <input type="text" placeholder={tr("كود السائق", "Driver code")} value={form.driverCode} onChange={e => {
               const code = e.target.value;
               const match = driverByCode(code);
               setForm({ ...form, driverCode: code, driver: match ? match.name : "" });
@@ -1139,54 +1145,63 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="لتر" value={form.liters} onChange={e => setForm({ ...form, liters: e.target.value })}
+          <input type="number" placeholder={tr("لتر", "Liters")} value={form.liters} onChange={e => setForm({ ...form, liters: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => {
+          <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => {
               const cost = e.target.value;
               const liters = cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : "";
               setForm({ ...form, cost, liters });
             }}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="العداد *" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+          <input type="number" placeholder={tr("العداد *", "Odometer *")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${!form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
         </div>
-        {form.driverCode && (
-          <p className="font-ui text-[11px] mt-2" style={{ color: form.driver ? C.teal : C.red }}>
-            {form.driver ? `✓ السائق: ${form.driver}` : "⚠ مفيش موظف بالكود ده"}
+        {form.plate && (
+          <p className="font-ui text-[11px] mt-2" style={{ color: vehicles.some(v => v.plate === form.plate) ? C.teal : C.red }}>
+            {vehicles.some(v => v.plate === form.plate) ? tr(`✓ السيارة: ${form.plate}`, `✓ Vehicle: ${form.plate}`) : tr("⚠ مفيش سيارة بالرقم ده في الأسطول", "⚠ No vehicle with this plate in the fleet")}
           </p>
         )}
-        <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>* اللتر بيتحسب أوتوماتيك من التكلفة (سعر اللتر {FUEL_PRICE_PER_LITER} ج.م) — تقدر تعدّله يدويًا لو مختلف · قراءة العداد إجبارية</p>
-        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>هيتسجل باسم المستخدم: {currentUser?.email}</p>
+        {form.driverCode && (
+          <p className="font-ui text-[11px] mt-2" style={{ color: form.driver ? C.teal : C.red }}>
+            {form.driver ? tr(`✓ السائق: ${form.driver}`, `✓ Driver: ${form.driver}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
+          </p>
+        )}
+        <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>
+          {tr(`* اللتر بيتحسب أوتوماتيك من التكلفة (سعر اللتر ${FUEL_PRICE_PER_LITER} ج.م) — تقدر تعدّله يدويًا لو مختلف · قراءة العداد إجبارية`, `* Liters are auto-calculated from cost (price/liter: EGP ${FUEL_PRICE_PER_LITER}) — you can edit it manually if different · Odometer reading is required`)}
+        </p>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
         <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> إضافة
+          <Plus size={14} /> {tr("إضافة", "Add")}
         </button>
       </div>
 
       {consumptionByPlate.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>تقرير معدل الاستهلاك</h3>
-            <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ تصدير CSV</button>
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("تقرير معدل الاستهلاك", "Consumption rate report")}</h3>
+            <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ {tr("تصدير CSV", "Export CSV")}</button>
           </div>
           <div className="space-y-2">
             {consumptionByPlate.map(v => {
               const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
                 <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
+                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}{suspicious ? tr(" · ⚠ احتمال تلاعب", " · ⚠ possible tampering") : ""}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
                 </div>
               );
             })}
           </div>
-          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>* الحساب بيعتمد على قراءة العداد المدخلة مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق. المعدل الأقل من {FRAUD_THRESHOLD_KM_PER_L} كم/لتر بيتلون بالأحمر كتنبيه لاحتمال تلاعب في الوقود</p>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+            {tr(`* الحساب بيعتمد على قراءة العداد المدخلة مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق. المعدل الأقل من ${FRAUD_THRESHOLD_KM_PER_L} كم/لتر بيتلون بالأحمر كتنبيه لاحتمال تلاعب في الوقود`, `* This calculation relies on the odometer reading entered with each fill-up — it must be entered for the report to be accurate. A rate below ${FRAUD_THRESHOLD_KM_PER_L} km/L is highlighted red as a possible fuel-tampering alert`)}
+          </p>
         </div>
       )}
 
       {sorted.length === 0 ? (
-        <EmptyState text="لسه مفيش عمليات تعبئة مسجلة. ضيف أول عملية من الفورم فوق." />
+        <EmptyState text={tr("لسه مفيش عمليات تعبئة مسجلة. ضيف أول عملية من الفورم فوق.", "No fill-ups recorded yet. Add the first one from the form above.")} />
       ) : (
         <>
           <div className="space-y-2">
@@ -1197,23 +1212,23 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
                     className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
                     {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
                   </select>
-                  <input type="text" placeholder="السائق" value={editForm.driver} onChange={e => setEditForm({ ...editForm, driver: e.target.value })}
+                  <input type="text" placeholder={tr("السائق", "Driver")} value={editForm.driver} onChange={e => setEditForm({ ...editForm, driver: e.target.value })}
                     className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
                   <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
                     className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                  <input type="number" placeholder="لتر" value={editForm.liters} onChange={e => setEditForm({ ...editForm, liters: e.target.value })}
+                  <input type="number" placeholder={tr("لتر", "Liters")} value={editForm.liters} onChange={e => setEditForm({ ...editForm, liters: e.target.value })}
                     className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                  <input type="number" placeholder="التكلفة" value={editForm.cost} onChange={e => {
+                  <input type="number" placeholder={tr("التكلفة", "Cost")} value={editForm.cost} onChange={e => {
                       const cost = e.target.value;
                       setEditForm({ ...editForm, cost, liters: cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : editForm.liters });
                     }}
                     className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-                  <input type="number" placeholder="العداد" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                  <input type="number" placeholder={tr("العداد", "Odometer")} value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
                     className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
-                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
                 </div>
               </div>
             ) : (
@@ -1222,11 +1237,11 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
                   <Fuel size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
-                  <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} لتر{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.enteredBy ? ` · بواسطة ${r.enteredBy}` : ""}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
+                  <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} {tr("لتر", "L")}{r.odometer ? ` · ${tr("عداد", "odometer")} ${r.odometer}` : ""}{r.enteredBy ? ` · ${tr("بواسطة", "by")} ${r.enteredBy}` : ""}</p>
                 </div>
-                {r.photo && <img src={r.photo} alt="ريسيت" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
-                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                {r.photo && <img src={r.photo} alt={tr("ريسيت", "receipt")} className="w-9 h-9 rounded-lg object-cover shrink-0" />}
+                <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} {tr("ج.م", "EGP")}</span>
                 <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
                   <Edit size={13} color={C.teal} />
                 </button>
@@ -1285,13 +1300,14 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     setPage(1);
   }
   function removeRecord(id) {
+    if (!confirm("متأكد إنك عايز تمسح سجل الصيانة ده؟")) return;
     setRecords(records.filter(r => r.id !== id));
   }
 
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>الصيانة</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل أعمال الصيانة والإصلاحات لكل عربية</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل أعمال الصيانة والإصلاحات لكل سيارة</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Wrench} value={records.length} label="عدد أعمال الصيانة" color={C.teal} />
@@ -1306,7 +1322,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
           <div className="space-y-2">
             {oilAlerts.map(a => (
               <div key={a.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {a.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {a.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
                   {a.lastOilOdometer > 0 ? `آخر تغيير زيت عند ${a.lastOilOdometer} كم` : "مفيش تغيير زيت مسجل قبل كده"}
                 </span>
@@ -1323,7 +1339,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
+            <option value="">السيارة</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
@@ -1358,7 +1374,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
                   <Wrench size={14} color={C.amber} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate} · {r.type}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>سيارة {r.plate} · {r.type}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>
                     {r.date}{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.nextDue ? ` · القادمة ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
                   </p>
@@ -1442,6 +1458,7 @@ function RouteTab({ stops, setStops, customerLocations, customers }) {
     setQ("");
   }
   function removeStop(uid) {
+    if (!confirm("متأكد إنك عايز تشيل النقطة دي من خط السير؟")) return;
     setStops(stops.filter(s => s.uid !== uid));
   }
   function moveStop(index, dir) {
@@ -1648,7 +1665,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       String(l.odometer) === String(form.odometer)
     );
     if (isDuplicate) {
-      alert("البيانات دي سبق تسجيلها — نفس العربية والتاريخ وقراءة العداد موجودين قبل كده");
+      alert("البيانات دي سبق تسجيلها — نفس السيارة والتاريخ وقراءة العداد موجودين قبل كده");
       return;
     }
     const platesLogs = logs.filter(l => l.plate === form.plate);
@@ -1656,7 +1673,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       const lastOdo = Math.max(...platesLogs.map(l => Number(l.odometer) || 0));
       const diff = Number(form.odometer) - lastOdo;
       if (diff < 0 || diff > 3000) {
-        const ok = confirm(`القراءة دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجلة لنفس العربية (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
+        const ok = confirm(`القراءة دي (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجلة لنفس السيارة (${lastOdo} كم). ممكن يكون فيه غلطة كتابة أو خطأ في قراءة الصورة. عايز تكمل حفظ بنفس الرقم؟`);
         if (!ok) return;
       }
     }
@@ -1667,6 +1684,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
     setPage(1);
   }
   function removeLog(id) {
+    if (!confirm("متأكد إنك عايز تمسح قراءة العداد دي؟")) return;
     setLogs(logs.filter(l => l.id !== id));
   }
   function startEdit(l) {
@@ -1686,7 +1704,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>قراءة العداد</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل قراءة عداد كل عربية بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجل قراءة عداد كل سيارة بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة قراءة</h3>
@@ -1708,7 +1726,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
+            <option value="">السيارة</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
@@ -1751,7 +1769,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
                   <Truck size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {l.plate}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>سيارة {l.plate}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}{l.enteredBy ? ` · بواسطة ${l.enteredBy}` : ""}</p>
                 </div>
                 {l.photo && <img src={l.photo} alt="عداد" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
@@ -1789,7 +1807,7 @@ function computePerFillConsumption(fuelRecords) {
       const km = Number(s[i].odometer) - Number(s[i - 1].odometer);
       const liters = Number(s[i].liters || 0);
       const kmPerLiter = liters > 0 ? km / liters : 0;
-      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter, driver: s[i].driver || "" });
+      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter, driver: s[i].driver || "", cost: Number(s[i].cost || 0) });
     }
   });
   return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -1811,6 +1829,10 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   const perFill = useMemo(() => perFillAll.filter(r =>
     (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelDriver || r.driver === fuelDriver)
   ), [perFillAll, fuelFrom, fuelTo, fuelDriver]);
+  const perFillTotals = useMemo(() => ({
+    cost: perFill.reduce((sum, r) => sum + (Number(r.cost) || 0), 0),
+    km: perFill.reduce((sum, r) => sum + (Number(r.km) || 0), 0),
+  }), [perFill]);
 
   const dailyByPlateAll = useMemo(() => {
     const byPlate = {};
@@ -1835,26 +1857,27 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
     (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
   ), [dailyByPlateAll, kmFrom, kmTo]);
+  const dailyKmTotal = useMemo(() => dailyByPlate.reduce((sum, r) => sum + (Number(r.km) || 0), 0), [dailyByPlate]);
 
   function exportConsumptionCsv() {
-    const header = "العربية,الكيلومترات,اللترات,كم/لتر\n";
+    const header = "السيارة,الكيلومترات,اللترات,كم/لتر\n";
     const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)}`).join("\n");
     download("تقرير_استهلاك_الوقود.csv", "\uFEFF" + header + rows);
   }
   function exportPerFillCsv() {
-    const header = "العربية,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
+    const header = "السيارة,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n";
     const rows = perFill.map(r => `${r.plate},${r.driver || ""},${r.date},${r.prevOdometer},${r.odometer},${r.km},${r.liters},${r.kmPerLiter.toFixed(2)}`).join("\n");
     download("تقرير_كل_تعبئة_وقود.csv", "\uFEFF" + header + rows);
   }
   function exportDailyCsv() {
-    const header = "العربية,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n";
+    const header = "السيارة,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n";
     const rows = dailyByPlate.map(r => `${r.plate},${r.from},${r.to},${r.km},${r.avgPerDay.toFixed(1)}`).join("\n");
     download("تقرير_الكيلومترات_اليومية.csv", "\uFEFF" + header + rows);
   }
   function exportConsumptionPdf() {
     exportTableToPdf(
       "تقرير معدل استهلاك الوقود",
-      ["العربية", "الكيلومترات", "اللترات", "كم/لتر"],
+      ["السيارة", "الكيلومترات", "اللترات", "كم/لتر"],
       consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2)]),
       "تقرير_استهلاك_الوقود.pdf"
     );
@@ -1862,7 +1885,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   function exportPerFillPdf() {
     exportTableToPdf(
       "تقرير كل تعبئة وقود لوحدها",
-      ["العربية", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
+      ["السيارة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"],
       perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
       "تقرير_كل_تعبئة_وقود.pdf"
     );
@@ -1870,7 +1893,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   function exportDailyPdf() {
     exportTableToPdf(
       "تقرير الكيلومترات اليومية",
-      ["العربية", "من تاريخ", "إلى تاريخ", "كيلومترات مقطوعة", "متوسط يومي"],
+      ["السيارة", "من تاريخ", "إلى تاريخ", "كيلومترات مقطوعة", "متوسط يومي"],
       dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)]),
       "تقرير_الكيلومترات_اليومية.pdf"
     );
@@ -1879,11 +1902,11 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>التقارير</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>معدل استهلاك الوقود والكيلومترات اليومية لكل عربية</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>معدل استهلاك الوقود والكيلومترات اليومية لكل سيارة</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>معدل استهلاك الوقود (إجمالي لكل عربية)</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>معدل استهلاك الوقود (إجمالي لكل سيارة)</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportConsumptionCsv} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
             <button onClick={exportConsumptionPdf} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
@@ -1897,7 +1920,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
               const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
                 <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {v.plate}</span>
                   <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
                 </div>
@@ -1929,18 +1952,25 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
         {perFill.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
         ) : (
-          <div className="space-y-2">
+          <>
+            <div className="rounded-xl p-2.5 mb-3 flex items-center gap-4 flex-wrap" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
+              <span className="font-ui text-xs font-semibold" style={{ color: C.text }}>إجمالي الفترة المختارة:</span>
+              <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{perFillTotals.cost.toFixed(2)} ج.م</span>
+              <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{perFillTotals.km.toFixed(0)} كم</span>
+            </div>
+            <div className="space-y-2">
             {perFill.map((r, i) => {
               const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {r.plate}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {r.plate}</span>
                   <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} كم · {r.liters} لتر{suspicious ? " · ⚠ احتمال تلاعب" : ""}</span>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} كم/لتر</span>
                 </div>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -1961,15 +1991,21 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
         {dailyByPlate.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"</p>
         ) : (
-          <div className="space-y-2">
+          <>
+            <div className="rounded-xl p-2.5 mb-3 flex items-center gap-4 flex-wrap" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
+              <span className="font-ui text-xs font-semibold" style={{ color: C.text }}>إجمالي الكيلومترات للفترة المختارة:</span>
+              <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{dailyKmTotal.toFixed(0)} كم</span>
+            </div>
+            <div className="space-y-2">
             {dailyByPlate.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {r.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>سيارة {r.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.from} → {r.to}</span>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{r.km} كم ({r.avgPerDay.toFixed(0)}/يوم)</span>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -2007,7 +2043,7 @@ function SettingsTab({ currentUser, lang, setLang }) {
           <button onClick={() => setLang("ar")}
             className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
             style={{ background: lang === "ar" ? `${C.teal}22` : C.surface2, color: lang === "ar" ? C.teal : C.muted, border: `1px solid ${lang === "ar" ? C.teal : C.border}` }}>
-            العربية
+            السيارة
           </button>
           <button onClick={() => setLang("en")}
             className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
@@ -2268,25 +2304,25 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
   const Active = activeTabDef.comp;
 
   const extraProps = tab === "fuel"
-    ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees, isAdmin, currentUser: user }
+    ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees, isAdmin, currentUser: user, lang }
     : tab === "maintenance"
-      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin }
+      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers }
+        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, lang }
         : tab === "customers"
-          ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin }
+          ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }
           : tab === "employees"
-            ? { employees, setEmployees, isAdmin }
+            ? { employees, setEmployees, isAdmin, lang }
             : tab === "vehicles"
-              ? { vehicles, setVehicles, isAdmin }
+              ? { vehicles, setVehicles, isAdmin, lang }
               : tab === "odometer"
-                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin }
+                ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin, lang }
                 : tab === "reports"
-                  ? { fuelRecords, odometerLogs, vehicles }
+                  ? { fuelRecords, odometerLogs, vehicles, lang }
                   : tab === "settings"
                     ? { currentUser: user, lang, setLang }
                     : tab === "admin"
-                      ? { accounts, setAccounts, currentUser: user, auditLog }
+                      ? { accounts, setAccounts, currentUser: user, auditLog, lang }
                       : tab === "dash"
                         ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }
                         : {};
