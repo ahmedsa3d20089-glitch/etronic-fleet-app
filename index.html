@@ -78,6 +78,7 @@ const Plus = makeIcon("➕");
 const Trash2 = makeIcon("🗑️");
 const Calendar = makeIcon("📅");
 const Navigation = makeIcon("🧭");
+const Edit = makeIcon("✏️");
 
 const C = {
   bg: "#12151B", surface: "#1A1F28", surface2: "#212837", border: "#2A313D",
@@ -207,7 +208,7 @@ function BarChart({ data, unit }) {
   );
 }
 
-function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles }) {
+function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
   const monthlyKm = useMemo(() => computeMonthlyKmByPlate(odometerLogs || []), [odometerLogs]);
   const kmChartData = monthlyKm.map(v => ({ label: v.plate, value: v.km, color: C.amber }));
 
@@ -241,8 +242,8 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>لوحة التحكم</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>نظرة عامة على بيانات الأسطول الحية</p>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{UI_TEXT.dashTitle[lang || "ar"]}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{UI_TEXT.dashSubtitle[lang || "ar"]}</p>
 
       {(overdueMaintenance > 0 || oilAlertsCount > 0 || fuelAnomalyCount > 0) && (
         <div className="rounded-2xl p-3.5 mb-5 flex items-center gap-2 flex-wrap" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
@@ -353,6 +354,8 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [form, setForm] = useState({ name: "", code: "", position: "", department: "", phone: "" });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
   const filtered = useMemo(() => employees.filter(e =>
     (e.name || "").toLowerCase().includes(q.toLowerCase()) || String(e.code).includes(q)
   ), [q, employees]);
@@ -367,6 +370,19 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
   function removeEmployee(id) {
     if (!confirm("متأكد إنك عايز تمسح الموظف ده؟")) return;
     setEmployees(employees.filter(e => e.id !== id));
+  }
+  function startEdit(e) {
+    setEditingId(e.id);
+    setEditForm({ ...e });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+  function saveEdit() {
+    setEmployees(employees.map(e => e.id === editingId ? { ...editForm } : e));
+    setEditingId(null);
+    setEditForm(null);
   }
 
   return (
@@ -397,7 +413,26 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
 
       <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="دور بالاسم أو الكود..." />
       <div className="space-y-2">
-        {paged.map(e => (
+        {paged.map(e => editingId === e.id ? (
+          <div key={e.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <input placeholder="الاسم" value={editForm.name} onChange={ev => setEditForm({ ...editForm, name: ev.target.value })}
+                className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input placeholder="الكود" value={editForm.code} onChange={ev => setEditForm({ ...editForm, code: ev.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input placeholder="الوظيفة" value={editForm.position} onChange={ev => setEditForm({ ...editForm, position: ev.target.value })}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input placeholder="القسم" value={editForm.department} onChange={ev => setEditForm({ ...editForm, department: ev.target.value })}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input placeholder="التليفون" value={editForm.phone} onChange={ev => setEditForm({ ...editForm, phone: ev.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
+              <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+            </div>
+          </div>
+        ) : (
           <div key={e.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
             <div className="w-9 h-9 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.teal}22`, color: C.teal }}>
               {e.code}
@@ -407,6 +442,9 @@ function EmployeesTab({ employees, setEmployees, isAdmin }) {
               <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{e.position} · {e.department}</p>
             </div>
             <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>{e.phone}</span>
+            <button onClick={() => startEdit(e)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+              <Edit size={13} color={C.teal} />
+            </button>
             {isAdmin && (
               <button onClick={() => removeEmployee(e.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                 <Trash2 size={13} color={C.red} />
@@ -938,12 +976,20 @@ function parseReceiptText(text, vehiclesList, employeesList) {
   return result;
 }
 
+const FUEL_PRICE_PER_LITER = 20.5;
+
 function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUser }) {
-  const [form, setForm] = useState({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
+  const [form, setForm] = useState({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "", driverCode: "" });
   const [page, setPage] = useState(1);
   const [photoData, setPhotoData] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  function driverByCode(code) {
+    return employees.find(emp => String(emp.code) === String(code).trim());
+  }
 
   const totalLiters = records.reduce((s, r) => s + Number(r.liters || 0), 0);
   const totalCost = records.reduce((s, r) => s + Number(r.cost || 0), 0);
@@ -998,7 +1044,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
     }
   }
   function addRecord() {
-    if (!form.plate || !form.date || !form.liters || !form.cost) return;
+    if (!form.plate || !form.date || !form.liters || !form.cost || !form.odometer) return;
     const isDuplicate = records.some(r =>
       r.plate === form.plate &&
       r.date === form.date &&
@@ -1022,13 +1068,26 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       }
     }
     setRecords([...records, { id: Date.now(), ...form, photo: photoData || null, enteredBy: currentUser?.email || "" }]);
-    setForm({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "" });
+    setForm({ plate: "", date: "", liters: "", cost: "", odometer: "", driver: "", driverCode: "" });
     setPhotoData(null);
     setScanNote("");
     setPage(1);
   }
   function removeRecord(id) {
     setRecords(records.filter(r => r.id !== id));
+  }
+  function startEdit(r) {
+    setEditingId(r.id);
+    setEditForm({ ...r });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+  function saveEdit() {
+    setRecords(records.map(r => r.id === editingId ? { ...editForm } : r));
+    setEditingId(null);
+    setEditForm(null);
   }
   function exportCsv() {
     const header = "التاريخ,العربية,السائق,لتر,التكلفة,العداد\n";
@@ -1072,17 +1131,31 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
             <option value="">العربية</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
-          <input type="text" placeholder="السائق" value={form.driver} onChange={e => setForm({ ...form, driver: e.target.value })}
+          <input type="text" placeholder="كود السائق" value={form.driverCode} onChange={e => {
+              const code = e.target.value;
+              const match = driverByCode(code);
+              setForm({ ...form, driverCode: code, driver: match ? match.name : "" });
+            }}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="number" placeholder="لتر" value={form.liters} onChange={e => setForm({ ...form, liters: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
+          <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => {
+              const cost = e.target.value;
+              const liters = cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : "";
+              setForm({ ...form, cost, liters });
+            }}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="العداد (اختياري)" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="number" placeholder="العداد *" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${!form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
         </div>
+        {form.driverCode && (
+          <p className="font-ui text-[11px] mt-2" style={{ color: form.driver ? C.teal : C.red }}>
+            {form.driver ? `✓ السائق: ${form.driver}` : "⚠ مفيش موظف بالكود ده"}
+          </p>
+        )}
+        <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>* اللتر بيتحسب أوتوماتيك من التكلفة (سعر اللتر {FUEL_PRICE_PER_LITER} ج.م) — تقدر تعدّله يدويًا لو مختلف · قراءة العداد إجبارية</p>
         <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>هيتسجل باسم المستخدم: {currentUser?.email}</p>
         <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
           style={{ background: `${C.amber}22`, color: C.amber }}>
@@ -1117,7 +1190,33 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       ) : (
         <>
           <div className="space-y-2">
-            {paged.map(r => (
+            {paged.map(r => editingId === r.id ? (
+              <div key={r.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                  <select value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                    {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+                  </select>
+                  <input type="text" placeholder="السائق" value={editForm.driver} onChange={e => setEditForm({ ...editForm, driver: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  <input type="number" placeholder="لتر" value={editForm.liters} onChange={e => setEditForm({ ...editForm, liters: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  <input type="number" placeholder="التكلفة" value={editForm.cost} onChange={e => {
+                      const cost = e.target.value;
+                      setEditForm({ ...editForm, cost, liters: cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : editForm.liters });
+                    }}
+                    className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  <input type="number" placeholder="العداد" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
+                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+                </div>
+              </div>
+            ) : (
               <div key={r.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
                 <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${C.teal}22` }}>
                   <Fuel size={14} color={C.teal} />
@@ -1128,6 +1227,9 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
                 </div>
                 {r.photo && <img src={r.photo} alt="ريسيت" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
                 <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+                  <Edit size={13} color={C.teal} />
+                </button>
                 {isAdmin && (
                   <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                     <Trash2 size={13} color={C.red} />
@@ -1507,6 +1609,8 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
   const [photoData, setPhotoData] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -1565,6 +1669,19 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
   function removeLog(id) {
     setLogs(logs.filter(l => l.id !== id));
   }
+  function startEdit(l) {
+    setEditingId(l.id);
+    setEditForm({ ...l });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+  function saveEdit() {
+    setLogs(logs.map(l => l.id === editingId ? { ...editForm } : l));
+    setEditingId(null);
+    setEditForm(null);
+  }
 
   return (
     <div>
@@ -1611,7 +1728,24 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
       ) : (
         <>
           <div className="space-y-2">
-            {paged.map(l => (
+            {paged.map(l => editingId === l.id ? (
+              <div key={l.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <select value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                    {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+                  </select>
+                  <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                  <input type="number" placeholder="قراءة العداد" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                    className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <button onClick={saveEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>حفظ</button>
+                  <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>إلغاء</button>
+                </div>
+              </div>
+            ) : (
               <div key={l.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
                 <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: `${C.teal}22` }}>
                   <Truck size={14} color={C.teal} />
@@ -1622,6 +1756,9 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin }) {
                 </div>
                 {l.photo && <img src={l.photo} alt="عداد" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
                 <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} كم</span>
+                <button onClick={() => startEdit(l)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+                  <Edit size={13} color={C.teal} />
+                </button>
                 {isAdmin && (
                   <button onClick={() => removeLog(l.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                     <Trash2 size={13} color={C.red} />
@@ -1841,7 +1978,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   );
 }
 
-function SettingsTab({ currentUser }) {
+function SettingsTab({ currentUser, lang, setLang }) {
   function forceUpdate() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
@@ -1854,20 +1991,56 @@ function SettingsTab({ currentUser }) {
   }
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الإعدادات</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{lang === "en" ? "Settings" : "الإعدادات"}</h2>
       <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <p className="font-ui text-sm mb-1" style={{ color: C.text }}>Etronic Fleet Dashboard</p>
-        <p className="font-ui text-xs" style={{ color: C.muted }}>مسجل دخول بحساب: {currentUser.email}</p>
+        <p className="font-ui text-xs" style={{ color: C.muted }}>
+          {lang === "en" ? "Signed in as: " : "مسجل دخول بحساب: "}{currentUser.email}
+        </p>
       </div>
+
       <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-2" style={{ color: C.text }}>البنية التقنية</h3>
-        <p className="font-ui text-xs" style={{ color: C.muted }}>الاستضافة: Vercel + GitHub · قاعدة البيانات: Firebase Firestore · تسجيل الدخول: Firebase Authentication</p>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>
+          {lang === "en" ? "Language" : "اللغة"}
+        </h3>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setLang("ar")}
+            className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
+            style={{ background: lang === "ar" ? `${C.teal}22` : C.surface2, color: lang === "ar" ? C.teal : C.muted, border: `1px solid ${lang === "ar" ? C.teal : C.border}` }}>
+            العربية
+          </button>
+          <button onClick={() => setLang("en")}
+            className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
+            style={{ background: lang === "en" ? `${C.teal}22` : C.surface2, color: lang === "en" ? C.teal : C.muted, border: `1px solid ${lang === "en" ? C.teal : C.border}` }}>
+            English
+          </button>
+        </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+          {lang === "en"
+            ? "This is a first pass: the sidebar menu, dashboard, and this settings page are translated. Other tabs are still in Arabic — tell me which ones to translate next and I'll extend it screen by screen."
+            : "دي أول خطوة: القائمة الجانبية ولوحة التحكم وصفحة الإعدادات دي بقوا بالإنجليزي. باقي التابات لسه عربي — قولّي عايز تبدأ بأي تاب وهترجمه."}
+        </p>
+      </div>
+
+      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-2" style={{ color: C.text }}>
+          {lang === "en" ? "Technical stack" : "البنية التقنية"}
+        </h3>
+        <p className="font-ui text-xs" style={{ color: C.muted }}>
+          {lang === "en"
+            ? "Hosting: Vercel + GitHub · Database: Firebase Firestore · Auth: Firebase Authentication"
+            : "الاستضافة: Vercel + GitHub · قاعدة البيانات: Firebase Firestore · تسجيل الدخول: Firebase Authentication"}
+        </p>
       </div>
       <button onClick={forceUpdate} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
         style={{ background: `${C.teal}22`, color: C.teal }}>
-        🔄 تحديث التطبيق لآخر نسخة
+        🔄 {lang === "en" ? "Update app to latest version" : "تحديث التطبيق لآخر نسخة"}
       </button>
-      <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>لو عدّلنا التطبيق ورفعنا نسخة جديدة على GitHub، دوس هنا عشان تتأكد إن جهازك شغال بأحدث نسخة فورًا بدل ما تستنى الكاش يتحدث لوحده.</p>
+      <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+        {lang === "en"
+          ? "If we made changes and pushed a new version to GitHub, tap here to make sure your device is running the latest version immediately instead of waiting for the cache to refresh on its own."
+          : "لو عدّلنا التطبيق ورفعنا نسخة جديدة على GitHub، دوس هنا عشان تتأكد إن جهازك شغال بأحدث نسخة فورًا بدل ما تستنى الكاش يتحدث لوحده."}
+      </p>
     </div>
   );
 }
@@ -2039,8 +2212,42 @@ function useFirestoreMap(key, initialFn) {
   return [state, setAndSync, ready];
 }
 
+// ترجمة أولى للواجهة (القائمة الجانبية + الرئيسية + الإعدادات) — تجربة أولى
+// لدعم لغتين، وممكن نوسّعها لباقي التابات تباعًا لو حابب
+const TAB_LABELS = {
+  dash: { ar: "الرئيسية", en: "Dashboard" },
+  route: { ar: "خط السير", en: "Route" },
+  fuel: { ar: "الوقود", en: "Fuel" },
+  maintenance: { ar: "الصيانة", en: "Maintenance" },
+  odometer: { ar: "قراءة العداد", en: "Odometer" },
+  reports: { ar: "التقارير", en: "Reports" },
+  vehicles: { ar: "الأسطول", en: "Fleet" },
+  employees: { ar: "الموظفين", en: "Employees" },
+  customers: { ar: "العملاء", en: "Customers" },
+  settings: { ar: "الإعدادات", en: "Settings" },
+  admin: { ar: "الإدارة", en: "Admin" },
+};
+const UI_TEXT = {
+  signOut: { ar: "تسجيل الخروج", en: "Sign out" },
+  signOutShort: { ar: "خروج", en: "Out" },
+  dashTitle: { ar: "لوحة التحكم", en: "Dashboard" },
+  dashSubtitle: { ar: "نظرة عامة على بيانات الأسطول الحية", en: "Live overview of your fleet data" },
+};
+
+function useLang() {
+  const [lang, setLangState] = useState(() => {
+    try { return localStorage.getItem("etronic_lang") || "ar"; } catch (e) { return "ar"; }
+  });
+  function setLang(next) {
+    setLangState(next);
+    try { localStorage.setItem("etronic_lang", next); } catch (e) {}
+  }
+  return [lang, setLang];
+}
+
 function EtronicDashboard({ user, isAdmin, permissions }) {
   const [tab, setTab] = useState("dash");
+  const [lang, setLang] = useLang();
   const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreCollection("etronic_fuel", () => []);
   const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreCollection("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
@@ -2077,11 +2284,11 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles }
                   : tab === "settings"
-                    ? { currentUser: user }
+                    ? { currentUser: user, lang, setLang }
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user, auditLog }
                       : tab === "dash"
-                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles }
+                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }
                         : {};
 
   return (
@@ -2091,11 +2298,12 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
         <img src={LOGO_URI} alt="Etronic Fleet" className="h-8 mb-6 px-2 object-contain" style={{ objectPosition: "right" }} />
         {visibleTabs.map(t => {
           const Icon = t.icon; const active = tab === t.key;
+          const label = (TAB_LABELS[t.key] && TAB_LABELS[t.key][lang]) || t.label;
           return (
             <button key={t.key} onClick={() => setTab(t.key)}
               className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-ui font-semibold text-right"
               style={{ background: active ? C.surface2 : "transparent", color: active ? C.amber : C.muted }}>
-              <Icon size={16} /> {t.label}
+              <Icon size={16} /> {label}
             </button>
           );
         })}
@@ -2103,7 +2311,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
         <div className="px-2 pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
           <p className="font-ui text-[11px] truncate mb-2" style={{ color: C.muted }}>{user.email}</p>
           <button onClick={() => auth.signOut()} className="w-full text-right font-ui text-xs font-semibold px-3 py-2 rounded-lg" style={{ background: `${C.red}18`, color: C.red }}>
-            تسجيل الخروج
+            {UI_TEXT.signOut[lang]}
           </button>
         </div>
       </aside>
@@ -2112,16 +2320,17 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
         <div className="flex md:hidden items-center justify-around p-2 overflow-x-auto" style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
           {visibleTabs.map(t => {
             const Icon = t.icon; const active = tab === t.key;
+            const label = (TAB_LABELS[t.key] && TAB_LABELS[t.key][lang]) || t.label;
             return (
               <button key={t.key} onClick={() => setTab(t.key)} className="flex flex-col items-center gap-1 p-1 shrink-0">
                 <Icon size={18} color={active ? C.amber : C.muted} />
-                <span className="text-[9px]" style={{ color: active ? C.amber : C.muted }}>{t.label}</span>
+                <span className="text-[9px]" style={{ color: active ? C.amber : C.muted }}>{label}</span>
               </button>
             );
           })}
           <button onClick={() => auth.signOut()} className="flex flex-col items-center gap-1 p-1 shrink-0">
             <Trash2 size={18} color={C.red} />
-            <span className="text-[9px]" style={{ color: C.red }}>خروج</span>
+            <span className="text-[9px]" style={{ color: C.red }}>{UI_TEXT.signOutShort[lang]}</span>
           </button>
         </div>
         <main className="p-6 overflow-y-auto">
