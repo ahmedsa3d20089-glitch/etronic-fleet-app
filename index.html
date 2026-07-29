@@ -2206,6 +2206,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+  const [viewPhoto, setViewPhoto] = useState(null);
 
   function removeDelivery(id) {
     if (!confirm(tr("متأكد إنك عايز تمسح سجل التسليم ده؟ الحذف ده نهائي.", "Are you sure you want to delete this delivery record? This cannot be undone."))) return;
@@ -2293,7 +2294,10 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
                     {d.notes ? ` · ${d.notes}` : ""}
                   </p>
                 </div>
-                {d.photo && <img src={d.photo} alt={tr("إثبات تسليم", "delivery proof")} className="w-9 h-9 rounded-lg object-cover shrink-0" />}
+                {d.photo && (
+                  <img src={d.photo} alt={tr("إثبات تسليم", "delivery proof")} onClick={() => setViewPhoto(d.photo)}
+                    className="w-9 h-9 rounded-lg object-cover shrink-0 cursor-pointer" />
+                )}
                 <span className="font-ui text-[11px] font-semibold shrink-0" style={{ color: d.status === "تم التسليم" ? C.teal : C.red }}>
                   {d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered")}
                 </span>
@@ -2307,6 +2311,19 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
           </div>
           <Pager page={page} setPage={setPage} total={filtered.length} />
         </>
+      )}
+
+      {viewPhoto && (
+        <div onClick={() => setViewPhoto(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: "rgba(0,0,0,0.85)" }}>
+          <img src={viewPhoto} alt={tr("إثبات تسليم", "delivery proof")} className="max-w-full max-h-full rounded-xl object-contain" />
+          <button onClick={() => setViewPhoto(null)}
+            className="absolute top-4 left-4 w-9 h-9 rounded-full flex items-center justify-center font-ui text-lg font-bold"
+            style={{ background: C.surface, color: C.text }}>
+            ×
+          </button>
+        </div>
       )}
     </div>
   );
