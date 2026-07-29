@@ -79,6 +79,9 @@ const Trash2 = makeIcon("🗑️");
 const Calendar = makeIcon("📅");
 const Navigation = makeIcon("🧭");
 const Edit = makeIcon("✏️");
+const Package = makeIcon("📦");
+const CheckCircle = makeIcon("✅");
+const XCircle = makeIcon("❌");
 
 const C = {
   bg: "#12151B", surface: "#1A1F28", surface2: "#212837", border: "#2A313D",
@@ -1455,10 +1458,13 @@ function twoOptImprove(points) {
   return route;
 }
 
-function RouteTab({ stops, setStops, customerLocations, customers, lang }) {
+function RouteTab({ stops, setStops, customerLocations, customers, deliveries, setDeliveries, currentUser, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
+  const [podUid, setPodUid] = useState(null);
+  const [podForm, setPodForm] = useState({ status: "", recipientName: "", notes: "", photo: null });
+  const [savingPod, setSavingPod] = useState(false);
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
@@ -1549,6 +1555,46 @@ function RouteTab({ stops, setStops, customerLocations, customers, lang }) {
     setStops([]);
   }
 
+  function openPod(uid) {
+    setPodUid(podUid === uid ? null : uid);
+    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
+  }
+  function handlePodPhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPodForm(prev => ({ ...prev, photo: reader.result }));
+    reader.readAsDataURL(file);
+  }
+  function savePod(stop) {
+    if (!podForm.status) {
+      alert(tr('اختار "تم التسليم" أو "لم يتم التسليم" الأول', 'Choose either "Delivered" or "Not delivered" first'));
+      return;
+    }
+    setSavingPod(true);
+    const record = {
+      id: Date.now(),
+      customerUid: stop.uid,
+      customerName: stop.name || "",
+      customerCode: stop.code || "",
+      status: podForm.status,
+      recipientName: podForm.recipientName || "",
+      notes: podForm.notes || "",
+      photo: podForm.photo || null,
+      deliveredAt: new Date().toISOString(),
+      enteredBy: currentUser?.email || "",
+    };
+    setDeliveries([...(deliveries || []), record]);
+    setSavingPod(false);
+    setPodUid(null);
+    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
+  }
+  function lastDeliveryFor(uid) {
+    const recs = (deliveries || []).filter(d => d.customerUid === uid);
+    if (recs.length === 0) return null;
+    return [...recs].sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || ""))[0];
+  }
+
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("خط السير", "Route")}</h2>
@@ -1601,29 +1647,86 @@ function RouteTab({ stops, setStops, customerLocations, customers, lang }) {
         <div className="space-y-2">
           {stops.map((s, i) => {
             const hasGeo = !!customerLocations[s.uid];
+            const lastDelivery = lastDeliveryFor(s.uid);
+            const podOpen = podUid === s.uid;
             return (
-              <div key={s.uid} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                <button onClick={() => openInGoogleMaps(customerLocations[s.uid], [s.name, s.territory, s.governorate, s.city])}
-                  className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}
-                  title={tr("افتح في خرائط جوجل", "Open in Google Maps")}>
-                  {i + 1}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{s.name || tr("بدون اسم", "No name")}</p>
-                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{[s.territory, s.governorate, s.city].filter(Boolean).join(" · ")} · {s.code}</p>
-                </div>
-                <span className="font-ui text-[10px] shrink-0" style={{ color: hasGeo ? C.teal : C.muted }}>{hasGeo ? tr("📍 دقيق", "📍 Precise") : tr("🗂️ تقريبي", "🗂️ Approximate")}</span>
-                <div className="flex flex-col gap-0.5">
-                  <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
-                    <ChevronUp size={12} color={C.muted} />
+              <div key={s.uid} className="rounded-xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center gap-3 p-3">
+                  <button onClick={() => openInGoogleMaps(customerLocations[s.uid], [s.name, s.territory, s.governorate, s.city])}
+                    className="w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0" style={{ background: `${C.amber}22`, color: C.amber }}
+                    title={tr("افتح في خرائط جوجل", "Open in Google Maps")}>
+                    {i + 1}
                   </button>
-                  <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
-                    <ChevronDown size={12} color={C.muted} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{s.name || tr("بدون اسم", "No name")}</p>
+                    <p className="font-ui text-xs truncate" style={{ color: C.muted }}>{[s.territory, s.governorate, s.city].filter(Boolean).join(" · ")} · {s.code}</p>
+                    {lastDelivery && (
+                      <p className="font-ui text-[10px] mt-0.5" style={{ color: lastDelivery.status === "تم التسليم" ? C.teal : C.red }}>
+                        {lastDelivery.status === "تم التسليم" ? "✅ " + tr("تم التسليم", "Delivered") : "❌ " + tr("لم يتم التسليم", "Not delivered")}
+                        {" · "}{(lastDelivery.deliveredAt || "").replace("T", " ").slice(0, 16)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="font-ui text-[10px] shrink-0" style={{ color: hasGeo ? C.teal : C.muted }}>{hasGeo ? tr("📍 دقيق", "📍 Precise") : tr("🗂️ تقريبي", "🗂️ Approximate")}</span>
+                  <button onClick={() => openPod(s.uid)}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg font-ui text-[10px] font-semibold shrink-0"
+                    style={{ background: `${C.teal}22`, color: C.teal }}>
+                    <Package size={12} /> {podOpen ? tr("قفل", "Close") : tr("تسجيل التسليم", "Record delivery")}
+                  </button>
+                  <div className="flex flex-col gap-0.5">
+                    <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
+                      <ChevronUp size={12} color={C.muted} />
+                    </button>
+                    <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1} className="p-1 rounded disabled:opacity-20" style={{ background: C.surface2 }}>
+                      <ChevronDown size={12} color={C.muted} />
+                    </button>
+                  </div>
+                  <button onClick={() => removeStop(s.uid)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                    <Trash2 size={13} color={C.red} />
                   </button>
                 </div>
-                <button onClick={() => removeStop(s.uid)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
-                  <Trash2 size={13} color={C.red} />
-                </button>
+
+                {podOpen && (
+                  <div className="p-3 pt-0 space-y-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                    <div className="flex items-center gap-2 mt-3">
+                      <button onClick={() => setPodForm({ ...podForm, status: "تم التسليم" })}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg font-ui text-xs font-semibold"
+                        style={{ background: podForm.status === "تم التسليم" ? C.teal : C.surface2, color: podForm.status === "تم التسليم" ? "#0B0E13" : C.text }}>
+                        <CheckCircle size={14} /> {tr("تم التسليم", "Delivered")}
+                      </button>
+                      <button onClick={() => setPodForm({ ...podForm, status: "لم يتم التسليم" })}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg font-ui text-xs font-semibold"
+                        style={{ background: podForm.status === "لم يتم التسليم" ? C.red : C.surface2, color: podForm.status === "لم يتم التسليم" ? "#0B0E13" : C.text }}>
+                        <XCircle size={14} /> {tr("لم يتم التسليم", "Not delivered")}
+                      </button>
+                    </div>
+
+                    <input type="text" placeholder={tr("اسم المستلم (لو مختلف عن العميل)", "Recipient name (if different from customer)")}
+                      value={podForm.recipientName} onChange={e => setPodForm({ ...podForm, recipientName: e.target.value })}
+                      className="w-full rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+
+                    <textarea placeholder={tr("ملاحظات", "Notes")} value={podForm.notes} onChange={e => setPodForm({ ...podForm, notes: e.target.value })}
+                      rows={2}
+                      className="w-full rounded-lg px-2 py-2 font-ui text-xs outline-none resize-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+                        📷 {tr("صوّر إثبات التسليم", "Photograph delivery proof")}
+                        <input type="file" accept="image/*" capture="environment" onChange={handlePodPhoto} className="hidden" />
+                      </label>
+                      {podForm.photo && <span className="font-ui text-xs" style={{ color: C.teal }}>✓ {tr("الصورة اتحفظت", "Photo saved")}</span>}
+                    </div>
+
+                    <p className="font-ui text-[11px]" style={{ color: C.muted }}>
+                      {tr("هيتسجل الوقت والتاريخ أوتوماتيك باسم:", "Date and time will be recorded automatically under:")} {currentUser?.email}
+                    </p>
+
+                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status}
+                      className="w-full px-3 py-2.5 rounded-lg font-ui text-sm font-bold disabled:opacity-50" style={{ background: C.amber, color: "#0B0E13" }}>
+                      {savingPod ? tr("بيحفظ...", "Saving...") : tr("حفظ سجل التسليم", "Save delivery record")}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1900,8 +2003,8 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   }, [dailyByPlate]);
 
   function exportConsumptionCsv() {
-    const header = tr("السيارة,الكيلومترات,اللترات,كم/لتر\n", "Vehicle,Km,Liters,Km/L\n");
-    const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)}`).join("\n");
+    const header = tr("السيارة,الكيلومترات,اللترات,كم/لتر,لتر/100كم\n", "Vehicle,Km,Liters,Km/L,L/100km\n");
+    const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)},${v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : ""}`).join("\n");
     download(tr("تقرير_استهلاك_الوقود.csv", "fuel_consumption_report.csv"), "\uFEFF" + header + rows);
   }
   function exportPerFillCsv() {
@@ -1917,8 +2020,8 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   function exportConsumptionPdf() {
     exportTableToPdf(
       tr("تقرير معدل استهلاك الوقود", "Fuel consumption rate report"),
-      tr(["السيارة", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Km", "Liters", "Km/L"]),
-      consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2)]),
+      tr(["السيارة", "الكيلومترات", "اللترات", "كم/لتر", "لتر/100كم"], ["Vehicle", "Km", "Liters", "Km/L", "L/100km"]),
+      consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2), v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"]),
       tr("تقرير_استهلاك_الوقود.pdf", "fuel_consumption_report.pdf")
     );
   }
@@ -1963,6 +2066,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
                   <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}</span>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
+                  <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>({v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"} {tr("لتر/100كم", "L/100km")})</span>
                 </div>
               );
             })}
@@ -2064,10 +2168,115 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
         )}
       </div>
 
-      <p className="font-ui text-[11px]" style={{ color: C.muted }}>* التصدير بصيغة CSV بيفتح مباشرة في Excel وبيدعم العربي بشكل كامل. تصدير PDF بيطلع تقرير بنفس البيانات جاهز للطباعة أو المشاركة.</p>
+      <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("* التصدير بصيغة CSV بيفتح مباشرة في Excel وبيدعم العربي بشكل كامل. تصدير PDF بيطلع تقرير بنفس البيانات جاهز للطباعة أو المشاركة.", "* CSV export opens directly in Excel with full Arabic support. PDF export produces a print/share-ready report with the same data.")}</p>
     </div>
   );
 }
+
+function DeliveryReportsTab({ deliveries, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
+  const [q, setQ] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+
+  const repOptions = useMemo(() =>
+    [...new Set((deliveries || []).map(d => d.enteredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [deliveries]);
+
+  const filtered = useMemo(() => (deliveries || []).filter(d => {
+    const dateOnly = (d.deliveredAt || "").slice(0, 10);
+    return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q))
+      && (!repFilter || d.enteredBy === repFilter)
+      && (!statusFilter || d.status === statusFilter)
+      && (!dateFrom || dateOnly >= dateFrom)
+      && (!dateTo || dateOnly <= dateTo);
+  }).sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || "")), [deliveries, q, repFilter, statusFilter, dateFrom, dateTo]);
+
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const deliveredCount = filtered.filter(d => d.status === "تم التسليم").length;
+  const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
+
+  function exportCsv() {
+    const header = tr("التاريخ والوقت,العميل,الكود,الحالة,المستلم,المندوب,ملاحظات\n", "Date & time,Customer,Code,Status,Recipient,Rep,Notes\n");
+    const rows = filtered.map(d => {
+      const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
+      return `${(d.deliveredAt || "").replace("T", " ").slice(0, 16)},${d.customerName || ""},${d.customerCode || ""},${statusText},${d.recipientName || ""},${d.enteredBy || ""},${(d.notes || "").replace(/,/g, " ")}`;
+    }).join("\n");
+    download(tr("تقرير_التسليمات.csv", "delivery_report.csv"), "\uFEFF" + header + rows);
+  }
+
+  return (
+    <div>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("تقارير التسليمات", "Delivery Reports")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل كل عمليات التسليم اللي اتسجلت من تاب خط السير", "Log of all deliveries recorded from the Route tab")}</p>
+
+      <div className="flex flex-wrap gap-3 mb-6">
+        <KpiCard icon={Package} value={filtered.length} label={tr("إجمالي السجلات", "Total records")} color={C.teal} />
+        <KpiCard icon={CheckCircle} value={deliveredCount} label={tr("تم التسليم", "Delivered")} color={C.teal} />
+        <KpiCard icon={XCircle} value={notDeliveredCount} label={tr("لم يتم التسليم", "Not delivered")} color={C.red} />
+      </div>
+
+      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("فلترة وبحث", "Search & filter")}</h3>
+          <button onClick={exportCsv} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+        </div>
+        <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={tr("دور باسم العميل أو الكود...", "Search by customer name or code...")} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} placeholder={tr("من تاريخ", "From")}
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} placeholder={tr("إلى تاريخ", "To")}
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <select value={repFilter} onChange={e => { setRepFilter(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+            <option value="">{tr("كل المناديب", "All reps")}</option>
+            {repOptions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+            <option value="">{tr("كل الحالات", "All statuses")}</option>
+            <option value="تم التسليم">{tr("تم التسليم", "Delivered")}</option>
+            <option value="لم يتم التسليم">{tr("لم يتم التسليم", "Not delivered")}</option>
+          </select>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState text={tr("لسه مفيش عمليات تسليم مسجلة تطابق الفلتر ده.", "No delivery records match this filter yet.")} />
+      ) : (
+        <>
+          <div className="space-y-2">
+            {paged.map(d => (
+              <div key={d.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: d.status === "تم التسليم" ? `${C.teal}22` : `${C.red}18` }}>
+                  {d.status === "تم التسليم" ? <CheckCircle size={14} color={C.teal} /> : <XCircle size={14} color={C.red} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{d.customerName || tr("بدون اسم", "No name")}</p>
+                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>
+                    {(d.deliveredAt || "").replace("T", " ").slice(0, 16)}
+                    {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
+                    {d.enteredBy ? ` · ${tr("المندوب", "Rep")}: ${d.enteredBy}` : ""}
+                    {d.notes ? ` · ${d.notes}` : ""}
+                  </p>
+                </div>
+                {d.photo && <img src={d.photo} alt={tr("إثبات تسليم", "delivery proof")} className="w-9 h-9 rounded-lg object-cover shrink-0" />}
+                <span className="font-ui text-[11px] font-semibold shrink-0" style={{ color: d.status === "تم التسليم" ? C.teal : C.red }}>
+                  {d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered")}
+                </span>
+              </div>
+            ))}
+          </div>
+          <Pager page={page} setPage={setPage} total={filtered.length} />
+        </>
+      )}
+    </div>
+  );
+}
+
 
 function SettingsTab({ currentUser, lang, setLang }) {
   function forceUpdate() {
@@ -2143,6 +2352,7 @@ const TABS = [
   { key: "maintenance", label: "الصيانة", icon: Wrench, comp: MaintenanceTab },
   { key: "odometer", label: "قراءة العداد", icon: TrendingUp, comp: OdometerTab },
   { key: "reports", label: "التقارير", icon: Building2, comp: ReportsTab },
+  { key: "deliveries", label: "تقارير التسليمات", icon: Package, comp: DeliveryReportsTab },
   { key: "vehicles", label: "الأسطول", icon: Truck, comp: VehiclesTab },
   { key: "employees", label: "الموظفين", icon: Users, comp: EmployeesTab },
   { key: "customers", label: "العملاء", icon: Building2, comp: CustomersTab },
@@ -2312,6 +2522,7 @@ const TAB_LABELS = {
   maintenance: { ar: "الصيانة", en: "Maintenance" },
   odometer: { ar: "قراءة العداد", en: "Odometer" },
   reports: { ar: "التقارير", en: "Reports" },
+  deliveries: { ar: "تقارير التسليمات", en: "Delivery Reports" },
   vehicles: { ar: "الأسطول", en: "Fleet" },
   employees: { ar: "الموظفين", en: "Employees" },
   customers: { ar: "العملاء", en: "Customers" },
@@ -2349,9 +2560,10 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
   const [customerLocations, setCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}));
   const [accounts, setAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email");
   const [auditLog] = useFirestoreCollection("etronic_audit_log", () => []);
+  const [deliveries, setDeliveries] = useFirestoreCollection("etronic_deliveries", () => []);
   const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
 
-  const RESTRICTED_KEYS = ["reports", "vehicles", "employees", "customers"];
+  const RESTRICTED_KEYS = ["reports", "deliveries", "vehicles", "employees", "customers"];
   const BASE_USER_TABS = TABS.filter(t => !RESTRICTED_KEYS.includes(t.key));
   const grantedTabs = TABS.filter(t => RESTRICTED_KEYS.includes(t.key) && (permissions || []).includes(t.key));
   const visibleTabs = isAdmin ? [...TABS, { key: "admin", label: "الإدارة", icon: Users, comp: AdminTab }] : [...BASE_USER_TABS, ...grantedTabs];
@@ -2363,7 +2575,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
     : tab === "maintenance"
       ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, lang }
+        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, deliveries, setDeliveries, currentUser: user, lang }
         : tab === "customers"
           ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }
           : tab === "employees"
@@ -2374,7 +2586,9 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                 ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin, lang }
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles, lang }
-                  : tab === "settings"
+                  : tab === "deliveries"
+                    ? { deliveries, lang }
+                    : tab === "settings"
                     ? { currentUser: user, lang, setLang }
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user, auditLog, lang }
@@ -2475,6 +2689,7 @@ function LoginScreen({ errorMsg }) {
 
 const PERMISSION_OPTIONS = [
   { key: "reports", label: "التقارير" },
+  { key: "deliveries", label: "تقارير التسليمات" },
   { key: "vehicles", label: "الأسطول" },
   { key: "employees", label: "الموظفين" },
   { key: "customers", label: "العملاء" },
