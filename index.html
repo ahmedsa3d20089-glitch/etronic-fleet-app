@@ -209,6 +209,7 @@ function BarChart({ data, unit }) {
 }
 
 function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
   const monthlyKm = useMemo(() => computeMonthlyKmByPlate(odometerLogs || []), [odometerLogs]);
   const kmChartData = monthlyKm.map(v => ({ label: v.plate, value: v.km, color: C.amber }));
 
@@ -247,39 +248,39 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
 
       {(overdueMaintenance > 0 || oilAlertsCount > 0 || fuelAnomalyCount > 0) && (
         <div className="rounded-2xl p-3.5 mb-5 flex items-center gap-2 flex-wrap" style={{ background: `${C.red}11`, border: `1px solid ${C.red}44` }}>
-          <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ تنبيهات:</span>
-          {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} صيانة مجدولة فات ميعادها</span>}
+          <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ {tr("تنبيهات:", "Alerts:")}</span>
+          {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} {tr("صيانة مجدولة فات ميعادها", "scheduled maintenance jobs are overdue")}</span>}
           {overdueMaintenance > 0 && (oilAlertsCount > 0 || fuelAnomalyCount > 0) && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} سيارة محتاجة تغيير زيت</span>}
+          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} {tr("سيارة محتاجة تغيير زيت", "vehicles need an oil change")}</span>}
           {oilAlertsCount > 0 && fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} سيارة معدل استهلاكها غير طبيعي الشهر ده</span>}
-          <span className="font-ui text-[11px]" style={{ color: C.muted }}>(التفاصيل في تابات "الصيانة" و"الوقود")</span>
+          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} {tr("سيارة معدل استهلاكها غير طبيعي الشهر ده", "vehicles have abnormal consumption this month")}</span>}
+          <span className="font-ui text-[11px]" style={{ color: C.muted }}>{tr('(التفاصيل في تابات "الصيانة" و"الوقود")', '(details in the "Maintenance" and "Fuel" tabs)')}</span>
         </div>
       )}
 
       <div className="flex flex-wrap gap-3 mb-6">
-        <KpiCard icon={Building2} value={customersCount} label="عدد العملاء في قاعدة البيانات" color={C.teal} />
-        <KpiCard icon={Users} value={employeesCount} label="عدد الموظفين" color={C.amber} />
-        <KpiCard icon={Truck} value={vehiclesCount} label="عدد العربيات النشطة" color={C.teal} />
+        <KpiCard icon={Building2} value={customersCount} label={tr("عدد العملاء في قاعدة البيانات", "Customers in the database")} color={C.teal} />
+        <KpiCard icon={Users} value={employeesCount} label={tr("عدد الموظفين", "Number of employees")} color={C.amber} />
+        <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد السيارات النشطة", "Active vehicles")} color={C.teal} />
       </div>
 
       <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>كيلومترات كل سيارة على مدار الشهر الحالي</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("كيلومترات كل سيارة على مدار الشهر الحالي", "Kilometers per vehicle this month")}</h3>
         {kmChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل سيارة من تاب "قراءة العداد"</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل سيارة من تاب "قراءة العداد"', 'Not enough odometer readings this month — log each vehicle\'s reading from the "Odometer" tab')}</p>
         ) : (
-          <BarChart data={kmChartData} unit=" كم" />
+          <BarChart data={kmChartData} unit={tr(" كم", " km")} />
         )}
       </div>
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>معدل استهلاك الوقود لكل سيارة على مدار الشهر الحالي (كم/لتر)</h3>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("معدل استهلاك الوقود لكل سيارة على مدار الشهر الحالي (كم/لتر)", "Fuel consumption rate per vehicle this month (km/L)")}</h3>
         {fuelChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data this month — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
           <>
-            <BarChart data={fuelChartData} unit=" كم/لتر" />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>* الشريط الأحمر معناه المعدل أقل من {FRAUD_THRESHOLD_KM_PER_L} كم/لتر — ممكن يكون فيه تلاعب في الوقود</p>
+            <BarChart data={fuelChartData} unit={tr(" كم/لتر", " km/L")} />
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>{tr(`* الشريط الأحمر معناه المعدل أقل من ${FRAUD_THRESHOLD_KM_PER_L} كم/لتر — ممكن يكون فيه تلاعب في الوقود`, `* A red bar means the rate is below ${FRAUD_THRESHOLD_KM_PER_L} km/L — this could indicate fuel tampering`)}</p>
           </>
         )}
       </div>
