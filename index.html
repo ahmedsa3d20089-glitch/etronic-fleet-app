@@ -2198,7 +2198,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   );
 }
 
-function DeliveryReportsTab({ deliveries, lang }) {
+function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [repFilter, setRepFilter] = useState("");
@@ -2206,6 +2206,11 @@ function DeliveryReportsTab({ deliveries, lang }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
+
+  function removeDelivery(id) {
+    if (!confirm(tr("متأكد إنك عايز تمسح سجل التسليم ده؟ الحذف ده نهائي.", "Are you sure you want to delete this delivery record? This cannot be undone."))) return;
+    setDeliveries((deliveries || []).filter(d => d.id !== id));
+  }
 
   const repOptions = useMemo(() =>
     [...new Set((deliveries || []).map(d => d.enteredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
@@ -2292,6 +2297,11 @@ function DeliveryReportsTab({ deliveries, lang }) {
                 <span className="font-ui text-[11px] font-semibold shrink-0" style={{ color: d.status === "تم التسليم" ? C.teal : C.red }}>
                   {d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered")}
                 </span>
+                {isAdmin && (
+                  <button onClick={() => removeDelivery(d.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
+                    <Trash2 size={13} color={C.red} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -2612,7 +2622,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles, lang }
                   : tab === "deliveries"
-                    ? { deliveries, lang }
+                    ? { deliveries, setDeliveries, isAdmin, lang }
                     : tab === "settings"
                     ? { currentUser: user, lang, setLang }
                     : tab === "admin"
