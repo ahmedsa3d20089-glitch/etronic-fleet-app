@@ -1068,6 +1068,8 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [viewPhoto, setViewPhoto] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [listFilter, setListFilter] = useState("");
 
   function driverByCode(code) {
     return employees.find(emp => String(emp.code) === String(code).trim());
@@ -1078,24 +1080,10 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
   const avgPrice = totalLiters ? (totalCost / totalLiters) : 0;
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const consumptionByPlate = useMemo(() => {
-    const byPlate = {};
-    records.forEach(r => {
-      if (r.odometer) {
-        if (!byPlate[r.plate]) byPlate[r.plate] = [];
-        byPlate[r.plate].push(r);
-      }
-    });
-    return Object.entries(byPlate).map(([plate, list]) => {
-      const s = [...list].sort((a, b) => Number(a.odometer) - Number(b.odometer));
-      const distance = s.length > 1 ? Number(s[s.length - 1].odometer) - Number(s[0].odometer) : 0;
-      const liters = s.slice(1).reduce((sum, r) => sum + Number(r.liters || 0), 0);
-      const kmPerLiter = liters > 0 ? distance / liters : 0;
-      return { plate, distance, liters, kmPerLiter, fillCount: s.length };
-    }).filter(x => x.distance > 0);
-  }, [records]);
+  const filtered = useMemo(() => sorted.filter(r =>
+    !listFilter || r.plate.toLowerCase().includes(listFilter.toLowerCase()) || (r.driver || "").toLowerCase().includes(listFilter.toLowerCase())
+  ), [sorted, listFilter]);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   async function handlePhoto(e) {
     const file = e.target.files[0];
@@ -1173,11 +1161,6 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
     setEditingId(null);
     setEditForm(null);
   }
-  function exportCsv() {
-    const header = tr("التاريخ,السيارة,السائق,لتر,التكلفة,العداد\n", "Date,Vehicle,Driver,Liters,Cost,Odometer\n");
-    const rows = sorted.map(r => csvRow([r.date, r.plate, r.driver || "", r.liters, r.cost, r.odometer || ""])).join("\n");
-    download(tr("تقرير_الوقود.csv", "fuel_report.csv"), "\uFEFF" + header + rows);
-  }
 
   return (
     <div>
@@ -1192,98 +1175,172 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة عملية تعبئة", "Add a fill-up")}</h3>
-
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-            📷 {tr("صوّر الريسيت", "Scan receipt")}
-            <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
-          </label>
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
-            🖼️ {tr("اختر من الصور", "Choose from photos")}
-            <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-          </label>
-          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
-          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
-        </div>
-        {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
-
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-          <input type="text" placeholder={tr("رقم السيارة", "Vehicle plate")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
-            list="fuel-vehicle-plates"
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none"
-            style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <datalist id="fuel-vehicle-plates">
-            {vehicles.map(v => <option key={v.plate} value={v.plate} />)}
-          </datalist>
-          <input type="text" placeholder={tr("كود السائق", "Driver code")} value={form.driverCode} onChange={e => {
-              const code = e.target.value;
-              const match = driverByCode(code);
-              setForm({ ...form, driverCode: code, driver: match ? match.name : "" });
-            }}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("لتر", "Liters")} value={form.liters} onChange={e => setForm({ ...form, liters: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => {
-              const cost = e.target.value;
-              const liters = cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : "";
-              setForm({ ...form, cost, liters });
-            }}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("العداد *", "Odometer *")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${!form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
-        </div>
-        {form.plate && (
-          <p className="font-ui text-[11px] mt-2" style={{ color: vehicles.some(v => v.plate === form.plate) ? C.teal : C.red }}>
-            {vehicles.some(v => v.plate === form.plate) ? tr(`✓ السيارة: ${form.plate}`, `✓ Vehicle: ${form.plate}`) : tr("⚠ مفيش سيارة بالرقم ده في الأسطول", "⚠ No vehicle with this plate in the fleet")}
-          </p>
-        )}
-        {form.driverCode && (
-          <p className="font-ui text-[11px] mt-2" style={{ color: form.driver ? C.teal : C.red }}>
-            {form.driver ? tr(`✓ السائق: ${form.driver}`, `✓ Driver: ${form.driver}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
-          </p>
-        )}
-        <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>
-          {tr(`* اللتر بيتحسب أوتوماتيك من التكلفة (سعر اللتر ${FUEL_PRICE_PER_LITER} ج.م) — تقدر تعدّله يدويًا لو مختلف · قراءة العداد إجبارية`, `* Liters are auto-calculated from cost (price/liter: EGP ${FUEL_PRICE_PER_LITER}) — you can edit it manually if different · Odometer reading is required`)}
-        </p>
-        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
-        <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
-          style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> {tr("إضافة", "Add")}
+        <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center justify-between w-full">
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إضافة عملية تعبئة", "Add a fill-up")}</h3>
+          <span className="flex items-center gap-1 font-ui text-xs font-semibold" style={{ color: C.amber }}>
+            {showAddForm ? tr("إخفاء ▲", "Hide ▲") : <><Plus size={13} /> {tr("إضافة ▼", "Add ▼")}</>}
+          </span>
         </button>
+
+        {showAddForm && (
+          <div className="mt-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
+                📷 {tr("صوّر الريسيت", "Scan receipt")}
+                <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+              </label>
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+                🖼️ {tr("اختر من الصور", "Choose from photos")}
+                <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+              </label>
+              {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
+              {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
+            </div>
+            {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
+
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+              <input type="text" placeholder={tr("رقم السيارة", "Vehicle plate")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+                list="fuel-vehicle-plates"
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none"
+                style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <datalist id="fuel-vehicle-plates">
+                {vehicles.map(v => <option key={v.plate} value={v.plate} />)}
+              </datalist>
+              <input type="text" placeholder={tr("كود السائق", "Driver code")} value={form.driverCode} onChange={e => {
+                  const code = e.target.value;
+                  const match = driverByCode(code);
+                  setForm({ ...form, driverCode: code, driver: match ? match.name : "" });
+                }}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("لتر", "Liters")} value={form.liters} onChange={e => setForm({ ...form, liters: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => {
+                  const cost = e.target.value;
+                  const liters = cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : "";
+                  setForm({ ...form, cost, liters });
+                }}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("العداد *", "Odometer *")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${!form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
+            </div>
+            {form.plate && (
+              <p className="font-ui text-[11px] mt-2" style={{ color: vehicles.some(v => v.plate === form.plate) ? C.teal : C.red }}>
+                {vehicles.some(v => v.plate === form.plate) ? tr(`✓ السيارة: ${form.plate}`, `✓ Vehicle: ${form.plate}`) : tr("⚠ مفيش سيارة بالرقم ده في الأسطول", "⚠ No vehicle with this plate in the fleet")}
+              </p>
+            )}
+            {form.driverCode && (
+              <p className="font-ui text-[11px] mt-2" style={{ color: form.driver ? C.teal : C.red }}>
+                {form.driver ? tr(`✓ السائق: ${form.driver}`, `✓ Driver: ${form.driver}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
+              </p>
+            )}
+            <p className="font-ui text-[11px] mt-1" style={{ color: C.muted }}>
+              {tr(`* اللتر بيتحسب أوتوماتيك من التكلفة (سعر اللتر ${FUEL_PRICE_PER_LITER} ج.م) — تقدر تعدّله يدويًا لو مختلف · قراءة العداد إجبارية`, `* Liters are auto-calculated from cost (price/liter: EGP ${FUEL_PRICE_PER_LITER}) — you can edit it manually if different · Odometer reading is required`)}
+            </p>
+            <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
+            <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+              style={{ background: `${C.amber}22`, color: C.amber }}>
+              <Plus size={14} /> {tr("إضافة", "Add")}
+            </button>
+          </div>
+        )}
       </div>
 
-      {consumptionByPlate.length > 0 && (
-        <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("تقرير معدل الاستهلاك", "Consumption rate report")}</h3>
-            <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ {tr("تصدير CSV", "Export CSV")}</button>
-          </div>
-          <div className="space-y-2">
-            {consumptionByPlate.map(v => {
-              const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
-              return (
-                <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}{suspicious ? tr(" · ⚠ احتمال تلاعب", " · ⚠ possible tampering") : ""}</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
-            {tr(`* الحساب بيعتمد على قراءة العداد المدخلة مع كل تعبئة — لازم تدخلها عشان التقرير يبقى دقيق. المعدل الأقل من ${FRAUD_THRESHOLD_KM_PER_L} كم/لتر بيتلون بالأحمر كتنبيه لاحتمال تلاعب في الوقود`, `* This calculation relies on the odometer reading entered with each fill-up — it must be entered for the report to be accurate. A rate below ${FRAUD_THRESHOLD_KM_PER_L} km/L is highlighted red as a possible fuel-tampering alert`)}
-          </p>
-        </div>
-      )}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("سجل عمليات التعبئة", "Fill-up history")}</h3>
+        <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("سجل", "records")}</span>
+      </div>
+      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("دور بالسيارة أو السائق...", "Search by vehicle or driver...")} />
 
-      {sorted.length === 0 ? (
-        <EmptyState text={tr("لسه مفيش عمليات تعبئة مسجلة. ضيف أول عملية من الفورم فوق.", "No fill-ups recorded yet. Add the first one from the form above.")} />
+      {filtered.length === 0 ? (
+        <EmptyState text={records.length === 0 ? tr("لسه مفيش عمليات تعبئة مسجلة. ضيف أول عملية من الفورم فوق.", "No fill-ups recorded yet. Add the first one from the form above.") : tr("مفيش نتائج تطابق البحث.", "No results match your search.")} />
       ) : (
         <>
-          <div className="space-y-2">
+          {/* جدول للكمبيوتر */}
+          <div className="hidden md:block overflow-x-auto rounded-2xl mb-2" style={{ border: `1px solid ${C.border}` }}>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: C.surface2 }}>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السائق", "Driver")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر", "Liters")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التكلفة", "Cost")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("العداد", "Odometer")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("صورة", "Photo")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paged.map(r => editingId === r.id ? (
+                  <tr key={r.id} style={{ borderTop: `1px solid ${C.border}`, background: `${C.teal}0d` }}>
+                    <td className="p-2">
+                      <select value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-ui text-xs outline-none w-24" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                        {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input type="text" value={editForm.driver} onChange={e => setEditForm({ ...editForm, driver: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-ui text-xs outline-none w-24" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2">
+                      <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2">
+                      <input type="number" value={editForm.liters} onChange={e => setEditForm({ ...editForm, liters: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-mono text-xs outline-none w-16" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2">
+                      <input type="number" value={editForm.cost} onChange={e => {
+                          const cost = e.target.value;
+                          setEditForm({ ...editForm, cost, liters: cost !== "" ? (Number(cost) / FUEL_PRICE_PER_LITER).toFixed(2) : editForm.liters });
+                        }}
+                        className="rounded-lg px-2 py-1.5 font-mono text-xs outline-none w-16" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2">
+                      <input type="number" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-mono text-xs outline-none w-20" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2"></td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={saveEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+                        <button onClick={cancelEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={r.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
+                    <td className="p-2.5 font-ui text-xs" style={{ color: C.text }}>{r.driver || "—"}</td>
+                    <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{r.date}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.liters}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.amber }}>{r.cost}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.odometer || "—"}</td>
+                    <td className="p-2.5">{r.photo && <PhotoThumb src={r.photo} alt={tr("ريسيت", "receipt")} onView={setViewPhoto} />}</td>
+                    <td className="p-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg" style={{ background: `${C.teal}18` }}>
+                          <Edit size={13} color={C.teal} />
+                        </button>
+                        {isAdmin && (
+                          <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                            <Trash2 size={13} color={C.red} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* كروت للموبايل */}
+          <div className="md:hidden space-y-2">
             {paged.map(r => editingId === r.id ? (
               <div key={r.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
                 <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
@@ -1332,7 +1389,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
               </div>
             ))}
           </div>
-          <Pager page={page} setPage={setPage} total={sorted.length} />
+          <Pager page={page} setPage={setPage} total={filtered.length} />
         </>
       )}
       <PhotoLightbox photo={viewPhoto} onClose={() => setViewPhoto(null)} alt={tr("ريسيت", "receipt")} />
@@ -1524,12 +1581,12 @@ function twoOptImprove(points) {
   return route;
 }
 
-function RouteTab({ stops, setStops, customerLocations, customers, deliveries, setDeliveries, currentUser, lang }) {
+function RouteTab({ stops, setStops, customerLocations, customers, employees, deliveries, setDeliveries, currentUser, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
   const [podUid, setPodUid] = useState(null);
-  const [podForm, setPodForm] = useState({ status: "", recipientName: "", notes: "", photo: null });
+  const [podForm, setPodForm] = useState({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
   const [savingPod, setSavingPod] = useState(false);
 
   const matches = useMemo(() => {
@@ -1623,7 +1680,10 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
 
   function openPod(uid) {
     setPodUid(podUid === uid ? null : uid);
-    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
+    setPodForm({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
+  }
+  function repByCode(code) {
+    return (employees || []).find(emp => String(emp.code) === String(code).trim());
   }
   function handlePodPhoto(e) {
     const file = e.target.files[0];
@@ -1635,6 +1695,10 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
       alert(tr('اختار "تم التسليم" أو "لم يتم التسليم" الأول', 'Choose either "Delivered" or "Not delivered" first'));
       return;
     }
+    if (!podForm.repCode || !podForm.repName) {
+      alert(tr("كود المندوب إجباري — تأكد إنك كتبت كود صحيح فيظهر اسم المندوب أوتوماتيك", "Rep code is required — make sure you enter a valid code so the rep's name appears automatically"));
+      return;
+    }
     setSavingPod(true);
     const record = {
       id: Date.now(),
@@ -1642,6 +1706,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
       customerName: stop.name || "",
       customerCode: stop.code || "",
       status: podForm.status,
+      repCode: podForm.repCode,
+      repName: podForm.repName,
       recipientName: podForm.recipientName || "",
       notes: podForm.notes || "",
       photo: podForm.photo || null,
@@ -1651,7 +1717,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
     setDeliveries([...(deliveries || []), record]);
     setSavingPod(false);
     setPodUid(null);
-    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
+    setPodForm({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
   }
   function lastDeliveryFor(uid) {
     const recs = (deliveries || []).filter(d => d.customerUid === uid);
@@ -1765,6 +1831,22 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
                       </button>
                     </div>
 
+                    <div>
+                      <input type="text" placeholder={tr("كود المندوب *", "Rep code *")}
+                        value={podForm.repCode} onChange={e => {
+                          const code = e.target.value;
+                          const match = repByCode(code);
+                          setPodForm({ ...podForm, repCode: code, repName: match ? match.name : "" });
+                        }}
+                        className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+                        style={{ background: C.surface2, border: `1px solid ${!podForm.repCode ? C.red + "66" : C.border}`, color: C.text }} />
+                      {podForm.repCode && (
+                        <p className="font-ui text-[11px] mt-1.5" style={{ color: podForm.repName ? C.teal : C.red }}>
+                          {podForm.repName ? tr(`✓ المندوب: ${podForm.repName}`, `✓ Rep: ${podForm.repName}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
+                        </p>
+                      )}
+                    </div>
+
                     <input type="text" placeholder={tr("اسم المستلم (لو مختلف عن العميل)", "Recipient name (if different from customer)")}
                       value={podForm.recipientName} onChange={e => setPodForm({ ...podForm, recipientName: e.target.value })}
                       className="w-full rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -1785,7 +1867,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, deliveries, s
                       {tr("هيتسجل الوقت والتاريخ أوتوماتيك باسم:", "Date and time will be recorded automatically under:")} {currentUser?.email}
                     </p>
 
-                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status}
+                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status || !podForm.repName}
                       className="w-full px-3 py-2.5 rounded-lg font-ui text-sm font-bold disabled:opacity-50" style={{ background: C.amber, color: "#0B0E13" }}>
                       {savingPod ? tr("بيحفظ...", "Saving...") : tr("حفظ سجل التسليم", "Save delivery record")}
                     </button>
@@ -1821,9 +1903,14 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [viewPhoto, setViewPhoto] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [listFilter, setListFilter] = useState("");
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const filtered = useMemo(() => sorted.filter(l =>
+    !listFilter || l.plate.toLowerCase().includes(listFilter.toLowerCase())
+  ), [sorted, listFilter]);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   async function handlePhoto(e) {
     const file = e.target.files[0];
@@ -1901,45 +1988,125 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل قراءة عداد كل سيارة بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
-
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
-            📷 {tr("صوّر العداد", "Scan odometer")}
-            <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
-          </label>
-          <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
-            🖼️ {tr("اختر من الصور", "Choose from photos")}
-            <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
-          </label>
-          {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
-          {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
-        </div>
-        {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("السيارة", "Vehicle")}</option>
-            {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
-          </select>
-          <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("قراءة العداد", "Odometer reading")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-        </div>
-        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
-        <button onClick={addLog} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
-          style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> {tr("إضافة", "Add")}
+        <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center justify-between w-full">
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
+          <span className="flex items-center gap-1 font-ui text-xs font-semibold" style={{ color: C.amber }}>
+            {showAddForm ? tr("إخفاء ▲", "Hide ▲") : <><Plus size={13} /> {tr("إضافة ▼", "Add ▼")}</>}
+          </span>
         </button>
+
+        {showAddForm && (
+          <div className="mt-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
+                📷 {tr("صوّر العداد", "Scan odometer")}
+                <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
+              </label>
+              <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+                🖼️ {tr("اختر من الصور", "Choose from photos")}
+                <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+              </label>
+              {scanning && <span className="font-ui text-xs" style={{ color: C.muted }}>{tr("بيقرا الصورة...", "Reading image...")}</span>}
+              {photoData && !scanning && <span className="font-ui text-xs" style={{ color: C.teal }}>{tr("✓ الصورة اتحفظت", "✓ Photo saved")}</span>}
+            </div>
+            {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                <option value="">{tr("السيارة", "Vehicle")}</option>
+                {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+              </select>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("قراءة العداد", "Odometer reading")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            </div>
+            <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>{tr("هيتسجل باسم المستخدم:", "Will be recorded under user:")} {currentUser?.email}</p>
+            <button onClick={addLog} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+              style={{ background: `${C.amber}22`, color: C.amber }}>
+              <Plus size={14} /> {tr("إضافة", "Add")}
+            </button>
+          </div>
+        )}
       </div>
 
-      {sorted.length === 0 ? (
-        <EmptyState text={tr("لسه مفيش قراءات مسجلة.", "No readings recorded yet.")} />
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("سجل قراءات العداد", "Odometer reading history")}</h3>
+        <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("سجل", "records")}</span>
+      </div>
+      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("دور بالسيارة...", "Search by vehicle...")} />
+
+      {filtered.length === 0 ? (
+        <EmptyState text={logs.length === 0 ? tr("لسه مفيش قراءات مسجلة.", "No readings recorded yet.") : tr("مفيش نتائج تطابق البحث.", "No results match your search.")} />
       ) : (
         <>
-          <div className="space-y-2">
+          {/* جدول للكمبيوتر */}
+          <div className="hidden md:block overflow-x-auto rounded-2xl mb-2" style={{ border: `1px solid ${C.border}` }}>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: C.surface2 }}>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("قراءة العداد", "Reading")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("بواسطة", "By")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("صورة", "Photo")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paged.map(l => editingId === l.id ? (
+                  <tr key={l.id} style={{ borderTop: `1px solid ${C.border}`, background: `${C.teal}0d` }}>
+                    <td className="p-2">
+                      <select value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-ui text-xs outline-none w-24" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                        {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                      <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2">
+                      <input type="number" value={editForm.odometer} onChange={e => setEditForm({ ...editForm, odometer: e.target.value })}
+                        className="rounded-lg px-2 py-1.5 font-mono text-xs outline-none w-24" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </td>
+                    <td className="p-2"></td>
+                    <td className="p-2"></td>
+                    <td className="p-2">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={saveEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+                        <button onClick={cancelEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={l.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{l.plate}</td>
+                    <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{l.date}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{l.odometer} {tr("كم", "km")}</td>
+                    <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{l.enteredBy || "—"}</td>
+                    <td className="p-2.5">{l.photo && <PhotoThumb src={l.photo} alt={tr("عداد", "odometer")} onView={setViewPhoto} />}</td>
+                    <td className="p-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => startEdit(l)} className="p-1.5 rounded-lg" style={{ background: `${C.teal}18` }}>
+                          <Edit size={13} color={C.teal} />
+                        </button>
+                        {isAdmin && (
+                          <button onClick={() => removeLog(l.id)} className="p-1.5 rounded-lg" style={{ background: `${C.red}18` }}>
+                            <Trash2 size={13} color={C.red} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* كروت للموبايل */}
+          <div className="md:hidden space-y-2">
             {paged.map(l => editingId === l.id ? (
               <div key={l.id} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -1979,7 +2146,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
               </div>
             ))}
           </div>
-          <Pager page={page} setPage={setPage} total={sorted.length} />
+          <Pager page={page} setPage={setPage} total={filtered.length} />
         </>
       )}
       <PhotoLightbox photo={viewPhoto} onClose={() => setViewPhoto(null)} alt={tr("عداد", "odometer")} />
@@ -2253,13 +2420,13 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   }
 
   const repOptions = useMemo(() =>
-    [...new Set((deliveries || []).map(d => d.enteredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [...new Set((deliveries || []).map(d => d.repName || d.enteredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [deliveries]);
 
   const filtered = useMemo(() => (deliveries || []).filter(d => {
     const dateOnly = (d.deliveredAt || "").slice(0, 10);
     return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q))
-      && (!repFilter || d.enteredBy === repFilter)
+      && (!repFilter || (d.repName || d.enteredBy) === repFilter)
       && (!statusFilter || d.status === statusFilter)
       && (!dateFrom || dateOnly >= dateFrom)
       && (!dateTo || dateOnly <= dateTo);
@@ -2273,7 +2440,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     const header = tr("التاريخ والوقت,العميل,الكود,الحالة,المستلم,المندوب,ملاحظات\n", "Date & time,Customer,Code,Status,Recipient,Rep,Notes\n");
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return csvRow([(d.deliveredAt || "").replace("T", " ").slice(0, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.enteredBy || "", d.notes || ""]);
+      return csvRow([(d.deliveredAt || "").replace("T", " ").slice(0, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""]);
     }).join("\n");
     download(tr("تقرير_التسليمات.csv", "delivery_report.csv"), "\uFEFF" + header + rows);
   }
@@ -2286,7 +2453,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
         d.customerName || "",
         d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered"),
         d.recipientName || "",
-        d.enteredBy || "",
+        d.repName || d.enteredBy || "",
         d.notes || "",
       ]),
       tr("تقرير_التسليمات.pdf", "delivery_report.pdf")
@@ -2347,7 +2514,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
                   <p className="font-ui text-xs truncate" style={{ color: C.muted }}>
                     {(d.deliveredAt || "").replace("T", " ").slice(0, 16)}
                     {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
-                    {d.enteredBy ? ` · ${tr("المندوب", "Rep")}: ${d.enteredBy}` : ""}
+                    {(d.repName || d.enteredBy) ? ` · ${tr("المندوب", "Rep")}: ${d.repName || d.enteredBy}` : ""}
                     {d.notes ? ` · ${d.notes}` : ""}
                   </p>
                 </div>
@@ -2671,7 +2838,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
     : tab === "maintenance"
       ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, deliveries, setDeliveries, currentUser: user, lang }
+        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, employees, deliveries, setDeliveries, currentUser: user, lang }
         : tab === "customers"
           ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }
           : tab === "employees"
