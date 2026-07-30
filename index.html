@@ -1729,6 +1729,27 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("خط السير", "Route")}</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("ضيف العملاء اللي هتزورهم — الترتيب بيعتمد على الموقع GPS الفعلي لو محفوظ، وبيرجع للترتيب حسب المنطقة لو مش محفوظ", "Add the customers you'll visit — ordering relies on actual saved GPS location, falling back to territory-based ordering when not saved")}</p>
 
+      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${repName ? C.border : C.red}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("كود المندوب", "Rep code")}</h3>
+        <input type="text" placeholder={tr("اكتب كود المندوب هنا *", "Enter rep code here *")}
+          value={repCode} onChange={e => handleRepCodeChange(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${!repCode ? C.red + "66" : C.border}`, color: C.text }} />
+        {repCode ? (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName ? C.teal : C.red }}>
+            {repName ? tr(`✓ المندوب: ${repName}`, `✓ Rep: ${repName}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
+          </p>
+        ) : (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: C.red }}>
+            {tr("لازم تدخل كود المندوب الصحيح الأول عشان تقدر تستخدم خط السير", "You must enter a valid rep code first to use the route")}
+          </p>
+        )}
+      </div>
+
+      {!repName ? (
+        <EmptyState text={tr("خط السير مقفول لحد ما تدخل كود مندوب صحيح فوق.", "The route is locked until you enter a valid rep code above.")} />
+      ) : (
+        <>
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={MapPin} value={stops.length} label={tr("عدد المحطات", "Number of stops")} color={C.teal} />
         <KpiCard icon={Navigation} value={geoCount} label={tr("محطات بموقع GPS دقيق", "Stops with precise GPS location")} color={C.teal} />
@@ -1754,18 +1775,6 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl p-3 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <input type="text" placeholder={tr("كود المندوب * (يتسجل مرة واحدة ويتستخدم لكل عمليات التسليم)", "Rep code * (set once, used for all deliveries)")}
-          value={repCode} onChange={e => handleRepCodeChange(e.target.value)}
-          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
-          style={{ background: C.surface2, border: `1px solid ${!repCode ? C.red + "66" : C.border}`, color: C.text }} />
-        {repCode && (
-          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName ? C.teal : C.red }}>
-            {repName ? tr(`✓ المندوب: ${repName}`, `✓ Rep: ${repName}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
-          </p>
         )}
       </div>
 
@@ -1862,7 +1871,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
                       {tr("هيتسجل الوقت والتاريخ أوتوماتيك باسم:", "Date and time will be recorded automatically under:")} {currentUser?.email}
                     </p>
 
-                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status || !podForm.repName}
+                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status || !repName}
                       className="w-full px-3 py-2.5 rounded-lg font-ui text-sm font-bold disabled:opacity-50" style={{ background: C.amber, color: "#0B0E13" }}>
                       {savingPod ? tr("بيحفظ...", "Saving...") : tr("حفظ سجل التسليم", "Save delivery record")}
                     </button>
@@ -1872,6 +1881,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );
