@@ -1068,7 +1068,6 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [viewPhoto, setViewPhoto] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [listFilter, setListFilter] = useState("");
 
   function driverByCode(code) {
@@ -1175,15 +1174,9 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center justify-between w-full">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إضافة عملية تعبئة", "Add a fill-up")}</h3>
-          <span className="flex items-center gap-1 font-ui text-xs font-semibold" style={{ color: C.amber }}>
-            {showAddForm ? tr("إخفاء ▲", "Hide ▲") : <><Plus size={13} /> {tr("إضافة ▼", "Add ▼")}</>}
-          </span>
-        </button>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة عملية تعبئة", "Add a fill-up")}</h3>
 
-        {showAddForm && (
-          <div className="mt-3">
+        <div className="mt-3">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
                 📷 {tr("صوّر الريسيت", "Scan receipt")}
@@ -1243,8 +1236,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
               style={{ background: `${C.amber}22`, color: C.amber }}>
               <Plus size={14} /> {tr("إضافة", "Add")}
             </button>
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between mb-3">
@@ -1586,8 +1578,10 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
   const [podUid, setPodUid] = useState(null);
-  const [podForm, setPodForm] = useState({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
+  const [podForm, setPodForm] = useState({ status: "", recipientName: "", notes: "", photo: null });
   const [savingPod, setSavingPod] = useState(false);
+  const [repCode, setRepCode] = useState("");
+  const [repName, setRepName] = useState("");
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
@@ -1680,10 +1674,15 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
 
   function openPod(uid) {
     setPodUid(podUid === uid ? null : uid);
-    setPodForm({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
+    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
   }
   function repByCode(code) {
     return (employees || []).find(emp => String(emp.code) === String(code).trim());
+  }
+  function handleRepCodeChange(code) {
+    const match = repByCode(code);
+    setRepCode(code);
+    setRepName(match ? match.name : "");
   }
   function handlePodPhoto(e) {
     const file = e.target.files[0];
@@ -1695,8 +1694,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
       alert(tr('اختار "تم التسليم" أو "لم يتم التسليم" الأول', 'Choose either "Delivered" or "Not delivered" first'));
       return;
     }
-    if (!podForm.repCode || !podForm.repName) {
-      alert(tr("كود المندوب إجباري — تأكد إنك كتبت كود صحيح فيظهر اسم المندوب أوتوماتيك", "Rep code is required — make sure you enter a valid code so the rep's name appears automatically"));
+    if (!repCode || !repName) {
+      alert(tr("كود المندوب إجباري — دخّله جنب زرار \"رتب حسب الموقع\" فوق قبل ما تسجل أي تسليم", "Rep code is required — enter it next to the \"Sort by location\" button above before recording any delivery"));
       return;
     }
     setSavingPod(true);
@@ -1706,8 +1705,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
       customerName: stop.name || "",
       customerCode: stop.code || "",
       status: podForm.status,
-      repCode: podForm.repCode,
-      repName: podForm.repName,
+      repCode: repCode,
+      repName: repName,
       recipientName: podForm.recipientName || "",
       notes: podForm.notes || "",
       photo: podForm.photo || null,
@@ -1717,7 +1716,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
     setDeliveries([...(deliveries || []), record]);
     setSavingPod(false);
     setPodUid(null);
-    setPodForm({ status: "", repCode: "", repName: "", recipientName: "", notes: "", photo: null });
+    setPodForm({ status: "", recipientName: "", notes: "", photo: null });
   }
   function lastDeliveryFor(uid) {
     const recs = (deliveries || []).filter(d => d.customerUid === uid);
@@ -1755,6 +1754,18 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl p-3 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <input type="text" placeholder={tr("كود المندوب * (يتسجل مرة واحدة ويتستخدم لكل عمليات التسليم)", "Rep code * (set once, used for all deliveries)")}
+          value={repCode} onChange={e => handleRepCodeChange(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${!repCode ? C.red + "66" : C.border}`, color: C.text }} />
+        {repCode && (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName ? C.teal : C.red }}>
+            {repName ? tr(`✓ المندوب: ${repName}`, `✓ Rep: ${repName}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
+          </p>
         )}
       </div>
 
@@ -1831,22 +1842,6 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
                       </button>
                     </div>
 
-                    <div>
-                      <input type="text" placeholder={tr("كود المندوب *", "Rep code *")}
-                        value={podForm.repCode} onChange={e => {
-                          const code = e.target.value;
-                          const match = repByCode(code);
-                          setPodForm({ ...podForm, repCode: code, repName: match ? match.name : "" });
-                        }}
-                        className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
-                        style={{ background: C.surface2, border: `1px solid ${!podForm.repCode ? C.red + "66" : C.border}`, color: C.text }} />
-                      {podForm.repCode && (
-                        <p className="font-ui text-[11px] mt-1.5" style={{ color: podForm.repName ? C.teal : C.red }}>
-                          {podForm.repName ? tr(`✓ المندوب: ${podForm.repName}`, `✓ Rep: ${podForm.repName}`) : tr("⚠ مفيش موظف بالكود ده", "⚠ No employee with this code")}
-                        </p>
-                      )}
-                    </div>
-
                     <input type="text" placeholder={tr("اسم المستلم (لو مختلف عن العميل)", "Recipient name (if different from customer)")}
                       value={podForm.recipientName} onChange={e => setPodForm({ ...podForm, recipientName: e.target.value })}
                       className="w-full rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -1903,7 +1898,6 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [viewPhoto, setViewPhoto] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [listFilter, setListFilter] = useState("");
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
@@ -1988,15 +1982,9 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل قراءة عداد كل سيارة بالتاريخ — بيتحسب منها الاستهلاك اليومي في تاب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <button onClick={() => setShowAddForm(!showAddForm)} className="flex items-center justify-between w-full">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
-          <span className="flex items-center gap-1 font-ui text-xs font-semibold" style={{ color: C.amber }}>
-            {showAddForm ? tr("إخفاء ▲", "Hide ▲") : <><Plus size={13} /> {tr("إضافة ▼", "Add ▼")}</>}
-          </span>
-        </button>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
 
-        {showAddForm && (
-          <div className="mt-3">
+        <div className="mt-3">
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs cursor-pointer font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>
                 📷 {tr("صوّر العداد", "Scan odometer")}
@@ -2027,8 +2015,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
               style={{ background: `${C.amber}22`, color: C.amber }}>
               <Plus size={14} /> {tr("إضافة", "Add")}
             </button>
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between mb-3">
@@ -2289,19 +2276,48 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
         {consumptionByPlate.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data yet — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
-          <div className="space-y-2">
-            {consumptionByPlate.map(v => {
-              const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
-              return (
-                <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
-                  <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
-                  <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>({v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"} {tr("لتر/100كم", "L/100km")})</span>
-                </div>
-              );
-            })}
-          </div>
+          <>
+            <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: C.surface2 }}>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الكيلومترات", "Km")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("اللترات", "Liters")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر/100كم", "L/100km")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumptionByPlate.map(v => {
+                    const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+                    return (
+                      <tr key={v.plate} style={{ borderTop: `1px solid ${C.border}`, background: suspicious ? `${C.red}0d` : "transparent" }}>
+                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{v.plate}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.distance.toFixed(0)}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.liters.toFixed(0)}</td>
+                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)}{suspicious ? " ⚠" : ""}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden space-y-2">
+              {consumptionByPlate.map(v => {
+                const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+                return (
+                  <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
+                    <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
+                    <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}</span>
+                    <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
+                    <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>({v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"} {tr("لتر/100كم", "L/100km")})</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
@@ -2341,7 +2357,36 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: C.surface2 }}>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السائق", "Driver")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم", "Km")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر", "Liters")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perFill.map((r, i) => {
+                    const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+                    return (
+                      <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: suspicious ? `${C.red}0d` : "transparent" }}>
+                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
+                        <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{r.date}</td>
+                        <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{r.driver || "—"}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.km}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.liters}</td>
+                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)}{suspicious ? " ⚠" : ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden space-y-2">
             {perFill.map((r, i) => {
               const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
               return (
@@ -2386,7 +2431,31 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background: C.surface2 }}>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("من", "From")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("إلى", "To")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم", "Km")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط يومي", "Daily avg")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailyByPlate.map((r, i) => (
+                    <tr key={i} style={{ borderTop: `1px solid ${C.border}` }}>
+                      <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
+                      <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{r.from}</td>
+                      <td className="p-2.5 font-ui text-xs" style={{ color: C.muted }}>{r.to}</td>
+                      <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{r.km}</td>
+                      <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.avgPerDay.toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden space-y-2">
             {dailyByPlate.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
