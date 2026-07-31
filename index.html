@@ -2435,11 +2435,24 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const [fuelPlate, setFuelPlate] = useState("");
   const [kmFrom, setKmFrom] = useState("");
   const [kmTo, setKmTo] = useState("");
+  const [anFrom, setAnFrom] = useState("");
+  const [anTo, setAnTo] = useState("");
+  const [anPlate, setAnPlate] = useState("");
 
-  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords), [fuelRecords]);
-  const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles, fuelRecords), [vehicles, fuelRecords]);
-  const fuelFlags = useMemo(() => computeFuelFlags(vehicles, fuelRecords), [vehicles, fuelRecords]);
-  const virtualTanks = useMemo(() => computeFleetVirtualTanks(vehicles, fuelRecords), [vehicles, fuelRecords]);
+  // فلترة سجلات الوقود الأول، وبعدين نمرر النتيجة لكل محركات التحليل
+  // عشان كل التقارير الجديدة (المتوسطات، الـFlags، التانك الافتراضي)
+  // تحترم نفس الفلتر تلقائيًا
+  const analyticsRecords = useMemo(() => fuelRecords.filter(r =>
+    (!anFrom || (r.date || "") >= anFrom) && (!anTo || (r.date || "") <= anTo) && (!anPlate || r.plate === anPlate)
+  ), [fuelRecords, anFrom, anTo, anPlate]);
+  const analyticsVehicles = useMemo(() => anPlate ? vehicles.filter(v => v.plate === anPlate) : vehicles, [vehicles, anPlate]);
+
+  const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
+  const fuelFlags = useMemo(() => computeFuelFlags(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
+  const virtualTanks = useMemo(() => computeFleetVirtualTanks(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
+  const allPlateOptions = useMemo(() =>
+    [...new Set(vehicles.map(v => v.plate).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [vehicles]);
 
   const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
   const plateOptions = useMemo(() =>
@@ -2448,16 +2461,6 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const perFill = useMemo(() => perFillAll.filter(r =>
     (!fuelFrom || r.date >= fuelFrom) && (!fuelTo || r.date <= fuelTo) && (!fuelPlate || r.plate === fuelPlate)
   ), [perFillAll, fuelFrom, fuelTo, fuelPlate]);
-  const perFillTotalsByPlate = useMemo(() => {
-    const byPlate = {};
-    perFill.forEach(r => {
-      if (!byPlate[r.plate]) byPlate[r.plate] = { plate: r.plate, cost: 0, km: 0 };
-      byPlate[r.plate].cost += Number(r.cost) || 0;
-      byPlate[r.plate].km += Number(r.km) || 0;
-    });
-    return Object.values(byPlate).sort((a, b) => a.plate.localeCompare(b.plate));
-  }, [perFill]);
-
   const dailyByPlateAll = useMemo(() => {
     const byPlate = {};
     odometerLogs.forEach(l => {
@@ -2481,18 +2484,70 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
     (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
   ), [dailyByPlateAll, kmFrom, kmTo]);
-  const dailyKmTotalByPlate = useMemo(() => {
-    const byPlate = {};
-    dailyByPlate.forEach(r => {
-      byPlate[r.plate] = (byPlate[r.plate] || 0) + (Number(r.km) || 0);
+  function exportAnalyticsCsv() {
+    const header = tr("السيارة,الحالي كم/لتر,متوسط آخر 10,متوسط 30 يوم,متوسط 90 يوم,أفضل,أسوأ,الانحراف %,الحالة,أسباب محتملة\n", "Vehicle,Current km/L,Avg last 10,Avg 30d,Avg 90d,Best,Worst,Deviation %,Status,Possible causes\n");
+    const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
+    const rows = fleetAnalytics.map(a => csvRow([
+      a.plate, a.current.toFixed(2), a.avgLast10.toFixed(2), a.avgLast30Days.toFixed(2), a.avgLast90Days.toFixed(2),
+      a.best.toFixed(2), a.worst.toFixed(2), a.deviationPct.toFixed(1), statusText(a.alertLevel), explainFuelAlert(a, lang).join(" / "),
+    ])).join("\n");
+    download(tr("تقرير_المتوسطات_والانحراف.csv", "averages_deviation_report.csv"), "\uFEFF" + header + rows);
+  }
+  function exportAnalyticsPdf() {
+    const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
+    exportTableToPdf(
+      tr("تقرير المتوسطات المتحركة والانحراف", "Rolling averages & deviation report"),
+      tr(["السيارة", "الحالي", "متوسط 10", "متوسط 30ي", "متوسط 90ي", "أفضل/أسوأ", "الانحراف %", "الحالة"], ["Vehicle", "Current", "Avg 10", "Avg 30d", "Avg 90d", "Best/Worst", "Deviation %", "Status"]),
+      fleetAnalytics.map(a => [a.plate, a.current.toFixed(2), a.avgLast10.toFixed(2), a.avgLast30Days.toFixed(2), a.avgLast90Days.toFixed(2), `${a.best.toFixed(1)}/${a.worst.toFixed(1)}`, a.deviationPct.toFixed(1), statusText(a.alertLevel)]),
+      tr("تقرير_المتوسطات_والانحراف.pdf", "averages_deviation_report.pdf")
+    );
+  }
+  function exportFlagsCsv() {
+    const header = tr("الخطورة,السيارة,التاريخ,نوع التنبيه,التفاصيل\n", "Severity,Vehicle,Date,Flag type,Details\n");
+    const rows = fuelFlags.map(f => csvRow([
+      f.severity === "critical" ? tr("حرج", "Critical") : tr("تحذير", "Warning"),
+      f.plate, f.date,
+      (FUEL_FLAG_LABELS[f.type] && FUEL_FLAG_LABELS[f.type][lang === "en" ? "en" : "ar"]) || f.type,
+      f.detail[lang === "en" ? "en" : "ar"],
+    ])).join("\n");
+    download(tr("تقرير_تنبيهات_التلاعب.csv", "tampering_flags_report.csv"), "\uFEFF" + header + rows);
+  }
+  function exportFlagsPdf() {
+    exportTableToPdf(
+      tr("تقرير تنبيهات احتمال التلاعب", "Possible tampering flags report"),
+      tr(["الخطورة", "السيارة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]),
+      fuelFlags.map(f => [
+        f.severity === "critical" ? tr("حرج", "Critical") : tr("تحذير", "Warning"),
+        f.plate, f.date,
+        (FUEL_FLAG_LABELS[f.type] && FUEL_FLAG_LABELS[f.type][lang === "en" ? "en" : "ar"]) || f.type,
+        f.detail[lang === "en" ? "en" : "ar"],
+      ]),
+      tr("تقرير_تنبيهات_التلاعب.pdf", "tampering_flags_report.pdf")
+    );
+  }
+  function exportTankCsv() {
+    const header = tr("السيارة,سعة التانك,المعدل المرجعي,التاريخ,السائق,اتحط لتر,المتوقع لتر,الفرق لتر\n", "Vehicle,Tank capacity,Baseline km/L,Date,Driver,Added L,Expected L,Gap L\n");
+    const rows = [];
+    virtualTanks.forEach(t => {
+      t.discrepancies.forEach(e => {
+        rows.push(csvRow([t.plate, t.capacity, t.baselineKmPerL.toFixed(2), e.date, e.driver || "", e.litersAdded.toFixed(1), e.expectedSpace.toFixed(1), e.gap.toFixed(1)]));
+      });
     });
-    return Object.entries(byPlate).map(([plate, km]) => ({ plate, km })).sort((a, b) => a.plate.localeCompare(b.plate));
-  }, [dailyByPlate]);
-
-  function exportConsumptionCsv() {
-    const header = tr("السيارة,الكيلومترات,اللترات,كم/لتر,لتر/100كم\n", "Vehicle,Km,Liters,Km/L,L/100km\n");
-    const rows = consumptionByPlate.map(v => csvRow([v.plate, v.distance, v.liters, v.kmPerLiter.toFixed(2), v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : ""])).join("\n");
-    download(tr("تقرير_استهلاك_الوقود.csv", "fuel_consumption_report.csv"), "\uFEFF" + header + rows);
+    download(tr("تقرير_التانك_الافتراضي.csv", "virtual_tank_report.csv"), "\uFEFF" + header + rows.join("\n"));
+  }
+  function exportTankPdf() {
+    const rows = [];
+    virtualTanks.forEach(t => {
+      t.discrepancies.forEach(e => {
+        rows.push([t.plate, e.date, e.driver || "", e.litersAdded.toFixed(1), e.expectedSpace.toFixed(1), e.gap.toFixed(1)]);
+      });
+    });
+    exportTableToPdf(
+      tr("تقرير التانك الافتراضي — وقود ناقص", "Virtual tank report — missing fuel"),
+      tr(["السيارة", "التاريخ", "السائق", "اتحط لتر", "المتوقع لتر", "الفرق لتر"], ["Vehicle", "Date", "Driver", "Added L", "Expected L", "Gap L"]),
+      rows,
+      tr("تقرير_التانك_الافتراضي.pdf", "virtual_tank_report.pdf")
+    );
   }
   function exportPerFillCsv() {
     const header = tr("السيارة,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n", "Vehicle,Driver,Date,Previous odometer,Current odometer,Km,Liters,Km/L\n");
@@ -2503,14 +2558,6 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
     const header = tr("السيارة,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n", "Vehicle,From,To,Km driven,Daily average\n");
     const rows = dailyByPlate.map(r => csvRow([r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)])).join("\n");
     download(tr("تقرير_الكيلومترات_اليومية.csv", "daily_km_report.csv"), "\uFEFF" + header + rows);
-  }
-  function exportConsumptionPdf() {
-    exportTableToPdf(
-      tr("تقرير معدل استهلاك الوقود", "Fuel consumption rate report"),
-      tr(["السيارة", "الكيلومترات", "اللترات", "كم/لتر", "لتر/100كم"], ["Vehicle", "Km", "Liters", "Km/L", "L/100km"]),
-      consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2), v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"]),
-      tr("تقرير_استهلاك_الوقود.pdf", "fuel_consumption_report.pdf")
-    );
   }
   function exportPerFillPdf() {
     exportTableToPdf(
@@ -2532,11 +2579,38 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير", "Reports")}</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("معدل استهلاك الوقود والكيلومترات اليومية لكل سيارة", "Fuel consumption rate and daily kilometers for each vehicle")}</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("تحليل استهلاك الوقود وكشف التلاعب والكيلومترات لكل سيارة", "Fuel consumption analysis, tampering detection, and kilometers per vehicle")}</p>
+
+      <div className="rounded-2xl p-3 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("فلترة تقارير التحليل والتلاعب", "Filter analysis & tampering reports")}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input type="date" value={anFrom} onChange={e => setAnFrom(e.target.value)} placeholder={tr("من تاريخ", "From")}
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="date" value={anTo} onChange={e => setAnTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
+            className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <select value={anPlate} onChange={e => setAnPlate(e.target.value)}
+            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+            <option value="">{tr("كل السيارات", "All vehicles")}</option>
+            {allPlateOptions.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {(anFrom || anTo || anPlate) && (
+            <button onClick={() => { setAnFrom(""); setAnTo(""); setAnPlate(""); }}
+              className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>
+              {tr("مسح الفلاتر", "Clear filters")}
+            </button>
+          )}
+        </div>
+      </div>
 
       {fleetAnalytics.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={exportAnalyticsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportAnalyticsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+            </div>
+          </div>
           <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
             {tr("بيقارن آخر تعبئة لكل سيارة بمتوسط أدائها الطبيعي (مش برقم ثابت لكل الأسطول) — أدق في كشف التلاعب", "Compares each vehicle's latest fill-up against its own normal average (not a fixed fleet-wide number) — more accurate for detecting tampering")}
           </p>
@@ -2621,7 +2695,13 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
 
       {fuelFlags.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("تنبيهات احتمال التلاعب", "Possible tampering flags")}</h3>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("تنبيهات احتمال التلاعب", "Possible tampering flags")}</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={exportFlagsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportFlagsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+            </div>
+          </div>
           <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
             {tr("أنماط مختلفة بتتفحص لوحدها — سجل ممكن يظهر في أكتر من تنبيه في نفس الوقت", "Independent patterns checked separately — one record can trigger more than one flag at once")}
           </p>
@@ -2644,7 +2724,13 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
 
       {virtualTanks.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: `${C.red}0d`, border: `1px solid ${C.red}44` }}>
-          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.red }}>🛢️ {tr("التانك الافتراضي — وقود ناقص غير مفسّر", "Virtual fuel tank — unexplained missing fuel")}</h3>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.red }}>🛢️ {tr("التانك الافتراضي — وقود ناقص غير مفسّر", "Virtual fuel tank — unexplained missing fuel")}</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={exportTankCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportTankPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+            </div>
+          </div>
           <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
             {tr("النظام بيحسب المفروض يكون فاضل كام لتر في التانك قبل كل تعبئة، ويقارنه باللي اتحط فعلاً. لو اتحط وقود أكتر من المساحة الفاضية المتوقعة، يبقى فيه وقود اختفى من غير ما يتصرف على مسافة — ده بيكشف حتى السرقة التدريجية البطيئة.", "The system estimates how much fuel should remain in the tank before each fill-up and compares it to what was actually added. If more fuel was added than the expected empty space, fuel disappeared without being driven — this catches even slow, gradual theft.")}
           </p>
@@ -2687,62 +2773,6 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
       )}
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("معدل استهلاك الوقود (إجمالي لكل سيارة)", "Fuel consumption rate (total per vehicle)")}</h3>
-          <div className="flex items-center gap-2">
-            <button onClick={exportConsumptionCsv} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
-            <button onClick={exportConsumptionPdf} disabled={!consumptionByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
-          </div>
-        </div>
-        {consumptionByPlate.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data yet — you need to enter the odometer reading with each fill-up")}</p>
-        ) : (
-          <>
-            <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
-              <table className="w-full">
-                <thead>
-                  <tr style={{ background: C.surface2 }}>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الكيلومترات", "Km")}</th>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("اللترات", "Liters")}</th>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر/100كم", "L/100km")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {consumptionByPlate.map(v => {
-                    const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
-                    return (
-                      <tr key={v.plate} style={{ borderTop: `1px solid ${C.border}`, background: suspicious ? `${C.red}0d` : "transparent" }}>
-                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{v.plate}</td>
-                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.distance.toFixed(0)}</td>
-                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.liters.toFixed(0)}</td>
-                        <td className="p-2.5 font-mono text-xs font-bold" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)}{suspicious ? " ⚠" : ""}</td>
-                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="md:hidden space-y-2">
-              {consumptionByPlate.map(v => {
-                const suspicious = v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
-                return (
-                  <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                    <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}</span>
-                    <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} {tr("كم", "km")} · {v.liters.toFixed(0)} {tr("لتر", "L")}</span>
-                    <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{v.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
-                    <span className="font-mono text-xs shrink-0" style={{ color: C.muted }}>({v.kmPerLiter > 0 ? (100 / v.kmPerLiter).toFixed(2) : "—"} {tr("لتر/100كم", "L/100km")})</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("كل تعبئة وقود لوحدها", "Every fill-up individually")}</h3>
           <div className="flex items-center gap-2">
@@ -2765,19 +2795,6 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش تعبئات كفاية في الفترة دي — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough fill-ups in this period — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
           <>
-            <div className="rounded-xl p-2.5 mb-3" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
-              <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("إجمالي كل سيارة لوحدها في الفترة المختارة:", "Total per vehicle for the selected period:")}</p>
-              <div className="flex flex-wrap gap-2">
-                {perFillTotalsByPlate.map(v => (
-                  <div key={v.plate} className="rounded-lg px-2.5 py-1.5" style={{ background: C.surface2 }}>
-                    <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}: </span>
-                    <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{v.cost.toFixed(2)} {tr("ج.م", "EGP")}</span>
-                    <span className="font-mono text-xs" style={{ color: C.muted }}> · </span>
-                    <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{v.km.toFixed(0)} {tr("كم", "km")}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
             <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
               <table className="w-full">
                 <thead>
@@ -2841,17 +2858,6 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"', 'Not enough data in this period — log odometer readings regularly from the "Odometer" tab')}</p>
         ) : (
           <>
-            <div className="rounded-xl p-2.5 mb-3" style={{ background: `${C.teal}11`, border: `1px solid ${C.teal}33` }}>
-              <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("إجمالي الكيلومترات لكل سيارة لوحدها في الفترة المختارة:", "Total km per vehicle for the selected period:")}</p>
-              <div className="flex flex-wrap gap-2">
-                {dailyKmTotalByPlate.map(v => (
-                  <div key={v.plate} className="rounded-lg px-2.5 py-1.5" style={{ background: C.surface2 }}>
-                    <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {v.plate}: </span>
-                    <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{v.km.toFixed(0)} {tr("كم", "km")}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
             <div className="hidden md:block overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
               <table className="w-full">
                 <thead>
