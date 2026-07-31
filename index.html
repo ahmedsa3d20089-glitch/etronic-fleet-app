@@ -299,17 +299,32 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
     "متوقفة": { ar: "متوقفة", en: "Out of service" },
   };
   const [q, setQ] = useState("");
-  const [form, setForm] = useState({ plate: "", model: "", status: "نشطة" });
+  const [form, setForm] = useState({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
   const filtered = vehicles.filter(v => v.plate.includes(q));
 
   function addVehicle() {
     if (!form.plate) return;
     setVehicles([...vehicles, { ...form, id: Date.now() }]);
-    setForm({ plate: "", model: "", status: "نشطة" });
+    setForm({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
   }
   function removeVehicle(id) {
     if (!confirm(tr("متأكد إنك عايز تمسح السيارة دي؟", "Are you sure you want to delete this vehicle?"))) return;
     setVehicles(vehicles.filter(v => v.id !== id));
+  }
+  function startEdit(v) {
+    setEditingId(v.id);
+    setEditForm({ tankCapacity: "", ...v });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm(null);
+  }
+  function saveEdit() {
+    setVehicles(vehicles.map(v => v.id === editingId ? { ...editForm } : v));
+    setEditingId(null);
+    setEditForm(null);
   }
 
   return (
@@ -330,6 +345,8 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
               <option value="تحت الصيانة">{STATUS_LABELS["تحت الصيانة"][lang === "en" ? "en" : "ar"]}</option>
               <option value="متوقفة">{STATUS_LABELS["متوقفة"][lang === "en" ? "en" : "ar"]}</option>
             </select>
+            <input type="number" placeholder={tr("سعة التانك باللتر (اختياري)", "Tank capacity in liters (optional)")} value={form.tankCapacity} onChange={e => setForm({ ...form, tankCapacity: e.target.value })}
+              className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           </div>
           <button onClick={addVehicle} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.amber}22`, color: C.amber }}>
@@ -340,21 +357,46 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
 
       <SearchBox value={q} onChange={setQ} placeholder={tr("دور برقم السيارة...", "Search by plate number...")} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {filtered.map(v => (
+        {filtered.map(v => editingId === v.id ? (
+          <div key={v.id} className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
+            <input placeholder={tr("رقم السيارة", "Plate number")} value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+              className="w-full mb-2 rounded-lg px-2 py-1.5 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            <input placeholder={tr("الموديل", "Model")} value={editForm.model} onChange={e => setEditForm({ ...editForm, model: e.target.value })}
+              className="w-full mb-2 rounded-lg px-2 py-1.5 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+              className="w-full mb-2 rounded-lg px-2 py-1.5 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+              <option value="نشطة">{STATUS_LABELS["نشطة"][lang === "en" ? "en" : "ar"]}</option>
+              <option value="تحت الصيانة">{STATUS_LABELS["تحت الصيانة"][lang === "en" ? "en" : "ar"]}</option>
+              <option value="متوقفة">{STATUS_LABELS["متوقفة"][lang === "en" ? "en" : "ar"]}</option>
+            </select>
+            <input type="number" placeholder={tr("سعة التانك (لتر)", "Tank capacity (L)")} value={editForm.tankCapacity} onChange={e => setEditForm({ ...editForm, tankCapacity: e.target.value })}
+              className="w-full mb-2 rounded-lg px-2 py-1.5 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            <div className="flex items-center gap-2">
+              <button onClick={saveEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
+              <button onClick={cancelEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: C.surface2, color: C.muted }}>{tr("إلغاء", "Cancel")}</button>
+            </div>
+          </div>
+        ) : (
           <div key={v.id} className="rounded-2xl p-4 relative" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
             <div className="flex items-start justify-between">
               <Truck size={16} color={C.amber} />
-              {isAdmin && (
-                <button onClick={() => removeVehicle(v.id)} className="p-1 rounded-lg" style={{ background: `${C.red}18` }}>
-                  <Trash2 size={11} color={C.red} />
+              <div className="flex items-center gap-1">
+                <button onClick={() => startEdit(v)} className="p-1 rounded-lg" style={{ background: `${C.teal}18` }}>
+                  <Edit size={11} color={C.teal} />
                 </button>
-              )}
+                {isAdmin && (
+                  <button onClick={() => removeVehicle(v.id)} className="p-1 rounded-lg" style={{ background: `${C.red}18` }}>
+                    <Trash2 size={11} color={C.red} />
+                  </button>
+                )}
+              </div>
             </div>
             <p className="font-mono text-lg font-bold mt-2" style={{ color: C.text }}>{v.plate}</p>
             <p className="font-ui text-xs mt-1" style={{ color: C.muted }}>{v.model || tr("بدون موديل", "No model")}</p>
             <p className="font-ui text-[11px] mt-1" style={{ color: v.status === "نشطة" ? C.teal : v.status === "تحت الصيانة" ? C.amber : C.red }}>
               {(STATUS_LABELS[v.status] && STATUS_LABELS[v.status][lang === "en" ? "en" : "ar"]) || STATUS_LABELS["نشطة"][lang === "en" ? "en" : "ar"]}
             </p>
+            {v.tankCapacity && <p className="font-mono text-[11px] mt-1" style={{ color: C.muted }}>⛽ {v.tankCapacity} {tr("لتر", "L")}</p>}
           </div>
         ))}
       </div>
@@ -2173,6 +2215,219 @@ function computePerFillConsumption(fuelRecords) {
   return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
 
+// ============================================================
+// طبقة حسابات الوقود (Clean Architecture) — منفصلة تمامًا عن
+// الواجهة، عشان أي تعديل على معادلات الحساب مستقبلاً (حدود
+// التنبيه، عدد أيام المتوسط المتحرك...) يبقى تغيير في مكان واحد
+// بس من غير ما يلمس أي component.
+// ============================================================
+
+const FUEL_ANALYTICS_CONFIG = {
+  rollingFillCount: 10,     // عدد آخر عمليات تموين للمتوسط المتحرك
+  rollingDaysShort: 30,     // نافذة الـ30 يوم
+  rollingDaysLong: 90,      // نافذة الـ90 يوم
+  warningDeviationPct: 10,  // ±10% = تحذير
+  criticalDeviationPct: 20, // ±20% = حرج
+};
+
+function averageOf(nums) {
+  const valid = nums.filter(n => n > 0);
+  if (valid.length === 0) return 0;
+  return valid.reduce((sum, n) => sum + n, 0) / valid.length;
+}
+
+// بيرجع كل إحصائيات سيارة واحدة: الاستهلاك الحالي، المتوسطات
+// المتحركة (آخر 10 عمليات / 30 يوم / 90 يوم)، أفضل وأسوأ قراءة،
+// ونسبة الانحراف عن المتوسط مع تصنيف التنبيه (طبيعي/تحذير/حرج)
+function computeVehicleFuelAnalytics(plate, fuelRecords) {
+  const rowsDesc = computePerFillConsumption(fuelRecords).filter(r => r.plate === plate);
+  const rows = [...rowsDesc].reverse(); // من الأقدم للأحدث عشان نحسب "آخر N" صح
+
+  if (rows.length === 0) {
+    return { plate, rows: [], hasData: false, current: 0, avgLast10: 0, avgLast30Days: 0, avgLast90Days: 0, best: 0, worst: 0, deviationPct: 0, alertLevel: null };
+  }
+
+  const now = new Date();
+  const cutoff = (days) => { const d = new Date(now); d.setDate(d.getDate() - days); return d; };
+  const cutoff30 = cutoff(FUEL_ANALYTICS_CONFIG.rollingDaysShort);
+  const cutoff90 = cutoff(FUEL_ANALYTICS_CONFIG.rollingDaysLong);
+
+  const last10 = rows.slice(-FUEL_ANALYTICS_CONFIG.rollingFillCount);
+  const last30Days = rows.filter(r => r.date && new Date(r.date) >= cutoff30);
+  const last90Days = rows.filter(r => r.date && new Date(r.date) >= cutoff90);
+
+  const current = rows[rows.length - 1].kmPerLiter;
+  const avgLast10 = averageOf(last10.map(r => r.kmPerLiter));
+  const avgLast30Days = averageOf(last30Days.map(r => r.kmPerLiter));
+  const avgLast90Days = averageOf(last90Days.map(r => r.kmPerLiter));
+  const allValid = rows.map(r => r.kmPerLiter).filter(n => n > 0);
+  const best = allValid.length ? Math.max(...allValid) : 0;
+  const worst = allValid.length ? Math.min(...allValid) : 0;
+
+  // الانحراف بيتحسب مقابل أدق متوسط متاح (30 يوم، وإلا آخر 10 عمليات لو مفيش بيانات كفاية بالتاريخ)
+  const baseline = avgLast30Days > 0 ? avgLast30Days : avgLast10;
+  const deviationPct = baseline > 0 ? ((current - baseline) / baseline) * 100 : 0;
+  let alertLevel = null;
+  if (Math.abs(deviationPct) >= FUEL_ANALYTICS_CONFIG.criticalDeviationPct) alertLevel = "critical";
+  else if (Math.abs(deviationPct) >= FUEL_ANALYTICS_CONFIG.warningDeviationPct) alertLevel = "warning";
+
+  return { plate, rows, hasData: true, current, avgLast10, avgLast30Days, avgLast90Days, best, worst, deviationPct, alertLevel };
+}
+
+// بيرجع تحليل كل السيارات مرة واحدة، مرتب من الأسوأ انحراف للأحسن
+function computeFleetFuelAnalytics(vehicles, fuelRecords) {
+  return vehicles
+    .map(v => computeVehicleFuelAnalytics(v.plate, fuelRecords))
+    .filter(a => a.hasData)
+    .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct));
+}
+
+const FUEL_FLAG_LABELS = {
+  SHORT_INTERVAL: { ar: "تموين أكتر من مرة في نفس اليوم", en: "Refueled more than once the same day" },
+  OVER_CAPACITY: { ar: "الكمية أكبر من سعة التانك", en: "Quantity exceeds tank capacity" },
+  ZERO_DISTANCE: { ar: "تعبئة من غير أي مسافة مقطوعة", en: "Refuel with zero distance driven" },
+  LOW_DISTANCE_HIGH_FUEL: { ar: "مسافة قليلة جدًا مقابل كمية وقود كبيرة", en: "Very low distance for a large fuel amount" },
+  ODOMETER_DECREASE: { ar: "قراءة العداد أقل من القراءة السابقة", en: "Odometer reading lower than the previous one" },
+};
+
+// نظام الـ Flags: بيدوّر على أنماط مختلفة من احتمالات التلاعب، كل واحد
+// مستقل عن التاني، عشان لو حالة معينة معدل استهلاكها طلع طبيعي بالصدفة
+// برضو تتمسك لو فيها علامة تلاعب تانية (زي كمية أكبر من التانك مثلاً)
+function computeFuelFlags(vehicles, fuelRecords) {
+  const vehicleByPlate = {};
+  vehicles.forEach(v => { vehicleByPlate[v.plate] = v; });
+  const flags = [];
+
+  const dayGroups = {};
+  fuelRecords.forEach(r => {
+    if (!r.plate || !r.date) return;
+    const key = r.plate + "|" + r.date;
+    if (!dayGroups[key]) dayGroups[key] = [];
+    dayGroups[key].push(r);
+  });
+  Object.entries(dayGroups).forEach(([key, list]) => {
+    if (list.length > 1) {
+      const [plate, date] = key.split("|");
+      flags.push({ type: "SHORT_INTERVAL", severity: "warning", plate, date, detail: { ar: `${list.length} مرات`, en: `${list.length} times` } });
+    }
+  });
+
+  computePerFillConsumption(fuelRecords).forEach(r => {
+    const vehicle = vehicleByPlate[r.plate];
+    if (vehicle && vehicle.tankCapacity && r.liters > Number(vehicle.tankCapacity)) {
+      flags.push({ type: "OVER_CAPACITY", severity: "critical", plate: r.plate, date: r.date, detail: { ar: `${r.liters} لتر > ${vehicle.tankCapacity} لتر`, en: `${r.liters} L > ${vehicle.tankCapacity} L` } });
+    }
+    if (r.km < 0) {
+      flags.push({ type: "ODOMETER_DECREASE", severity: "critical", plate: r.plate, date: r.date, detail: { ar: `${r.odometer} < ${r.prevOdometer}`, en: `${r.odometer} < ${r.prevOdometer}` } });
+    } else if (r.km === 0 && r.liters > 0) {
+      flags.push({ type: "ZERO_DISTANCE", severity: "warning", plate: r.plate, date: r.date, detail: { ar: `${r.liters} لتر`, en: `${r.liters} L` } });
+    } else if (r.km > 0 && r.km < 5 && r.liters >= 5) {
+      flags.push({ type: "LOW_DISTANCE_HIGH_FUEL", severity: "warning", plate: r.plate, date: r.date, detail: { ar: `${r.km} كم / ${r.liters} لتر`, en: `${r.km} km / ${r.liters} L` } });
+    }
+  });
+
+  return flags.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
+// ============================================================
+// Virtual Fuel Tank — محاكاة مستوى الوقود المتوقع في التانك
+// ============================================================
+// الفكرة: بدل ما نسأل "هل معدل الاستهلاك ده طبيعي؟"، بنسأل "هل الكمية
+// اللي اتحطت في التانك دلوقتي منطقية بناءً على اللي المفروض يكون متبقي
+// فيه؟". بنحسب المستوى المتوقع بعد كل رحلة (المستوى السابق ناقص اللي
+// اتصرف على المسافة المقطوعة حسب معدل السيارة التاريخي)، وبنقارنه
+// بالمساحة الفاضية اللي اتملت فعليًا عند التعبئة الجاية.
+// ده بيكشف حتى السرقة التدريجية البطيئة اللي مبتظهرش في حسابات كم/لتر
+// العادية، لأنها بتبان كفرق متراكم بين المتوقع والفعلي.
+// محتاج سعة التانك تكون متسجلة للسيارة عشان يشتغل.
+
+const VIRTUAL_TANK_TOLERANCE_L = 5; // فرق مسموح بيه قبل ما نعتبره مشكلة
+
+function computeVirtualTank(plate, vehicles, fuelRecords) {
+  const vehicle = vehicles.find(v => v.plate === plate);
+  const capacity = vehicle && vehicle.tankCapacity ? Number(vehicle.tankCapacity) : 0;
+  if (!capacity) return { plate, hasCapacity: false, entries: [], discrepancies: [] };
+
+  const analytics = computeVehicleFuelAnalytics(plate, fuelRecords);
+  // بنستخدم متوسط السيارة التاريخي كأساس لتقدير الصرف على كل كيلومتر
+  const baselineKmPerL = analytics.avgLast90Days > 0 ? analytics.avgLast90Days
+    : analytics.avgLast10 > 0 ? analytics.avgLast10 : 0;
+  if (!baselineKmPerL) return { plate, hasCapacity: true, hasBaseline: false, entries: [], discrepancies: [] };
+
+  const fills = fuelRecords
+    .filter(r => r.plate === plate && r.odometer)
+    .sort((a, b) => (a.date || "").localeCompare(b.date || "") || Number(a.odometer) - Number(b.odometer));
+  if (fills.length < 2) return { plate, hasCapacity: true, hasBaseline: true, entries: [], discrepancies: [] };
+
+  const entries = [];
+  const discrepancies = [];
+  // بنفترض إن أول تعبئة ملت التانك (نقطة بداية معقولة للمحاكاة)
+  let levelAfterFill = capacity;
+
+  for (let i = 1; i < fills.length; i++) {
+    const km = Number(fills[i].odometer) - Number(fills[i - 1].odometer);
+    const litersAdded = Number(fills[i].liters || 0);
+    if (km < 0) { levelAfterFill = capacity; continue; }
+
+    const expectedBurned = km / baselineKmPerL;
+    const expectedLevelBefore = Math.max(0, levelAfterFill - expectedBurned);
+    // المساحة الفاضية المتوقعة في التانك عند التعبئة دي
+    const expectedSpace = capacity - expectedLevelBefore;
+    // لو اتحط وقود أكتر من المساحة المتوقعة، يبقى التانك كان أفضى من
+    // المفروض = وقود اختفى من غير ما يتصرف على مسافة
+    const gap = litersAdded - expectedSpace;
+
+    const entry = {
+      date: fills[i].date,
+      km,
+      litersAdded,
+      expectedBurned,
+      expectedLevelBefore,
+      expectedSpace,
+      gap,
+      driver: fills[i].driver || "",
+    };
+    entries.push(entry);
+    if (gap > VIRTUAL_TANK_TOLERANCE_L) discrepancies.push(entry);
+
+    levelAfterFill = Math.min(capacity, expectedLevelBefore + litersAdded);
+  }
+
+  const totalGap = discrepancies.reduce((sum, e) => sum + e.gap, 0);
+  return { plate, hasCapacity: true, hasBaseline: true, capacity, baselineKmPerL, entries: entries.reverse(), discrepancies, totalGap };
+}
+
+function computeFleetVirtualTanks(vehicles, fuelRecords) {
+  return vehicles
+    .map(v => computeVirtualTank(v.plate, vehicles, fuelRecords))
+    .filter(t => t.hasCapacity && t.hasBaseline && t.discrepancies.length > 0)
+    .sort((a, b) => b.totalGap - a.totalGap);
+}
+
+// ============================================================
+// محرك الشرح الذكي — بيقترح أسباب محتملة لكل تنبيه بدل ما يعرض
+// التنبيه لوحده من غير تفسير
+// ============================================================
+function explainFuelAlert(analytics, lang) {
+  const t = (ar, en) => (lang === "en" ? en : ar);
+  const reasons = [];
+  if (!analytics || !analytics.alertLevel) return reasons;
+
+  if (analytics.deviationPct < 0) {
+    // استهلاك أسوأ من المعتاد (كيلومترات أقل على نفس الوقود)
+    reasons.push(t("احتمال سرقة أو تسريب وقود", "Possible fuel theft or leak"));
+    reasons.push(t("زيادة في الحمولة عن المعتاد", "Heavier load than usual"));
+    reasons.push(t("ازدحام مروري أو توقف طويل والمحرك شغال", "Traffic congestion or long idling with the engine running"));
+    reasons.push(t("احتياج صيانة (فلاتر، إطارات، ضبط محرك)", "Maintenance needed (filters, tires, engine tuning)"));
+  } else {
+    // استهلاك أفضل بشكل غير طبيعي — غالبًا مشكلة في البيانات مش في الأداء
+    reasons.push(t("خطأ في قراءة العداد (رقم أكبر من الحقيقي)", "Odometer misreading (entered higher than actual)"));
+    reasons.push(t("تعبئة مسجلة بكمية أقل من الفعلي", "Fill-up logged with less fuel than actually added"));
+    reasons.push(t("تعبئة سابقة مش متسجلة في النظام", "A previous fill-up is missing from the system"));
+  }
+  return reasons;
+}
+
 function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [fuelFrom, setFuelFrom] = useState("");
@@ -2182,6 +2437,9 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const [kmTo, setKmTo] = useState("");
 
   const consumptionByPlate = useMemo(() => computeConsumptionByPlate(fuelRecords), [fuelRecords]);
+  const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles, fuelRecords), [vehicles, fuelRecords]);
+  const fuelFlags = useMemo(() => computeFuelFlags(vehicles, fuelRecords), [vehicles, fuelRecords]);
+  const virtualTanks = useMemo(() => computeFleetVirtualTanks(vehicles, fuelRecords), [vehicles, fuelRecords]);
 
   const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
   const plateOptions = useMemo(() =>
@@ -2275,6 +2533,158 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير", "Reports")}</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("معدل استهلاك الوقود والكيلومترات اليومية لكل سيارة", "Fuel consumption rate and daily kilometers for each vehicle")}</p>
+
+      {fleetAnalytics.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
+          <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
+            {tr("بيقارن آخر تعبئة لكل سيارة بمتوسط أدائها الطبيعي (مش برقم ثابت لكل الأسطول) — أدق في كشف التلاعب", "Compares each vehicle's latest fill-up against its own normal average (not a fixed fleet-wide number) — more accurate for detecting tampering")}
+          </p>
+
+          <div className="hidden md:block overflow-x-auto rounded-xl" style={{ border: `1px solid ${C.border}` }}>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: C.surface2 }}>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الحالي", "Current")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط آخر 10", "Avg last 10")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط 30 يوم", "Avg 30d")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط 90 يوم", "Avg 90d")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("أفضل/أسوأ", "Best/Worst")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الانحراف", "Deviation")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الحالة", "Status")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fleetAnalytics.map(a => (
+                  <React.Fragment key={a.plate}>
+                  <tr style={{ borderTop: `1px solid ${C.border}`, background: a.alertLevel === "critical" ? `${C.red}14` : a.alertLevel === "warning" ? `${C.amber}14` : "transparent" }}>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{a.plate}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{a.current.toFixed(2)}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{a.avgLast10 > 0 ? a.avgLast10.toFixed(2) : "—"}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{a.avgLast30Days > 0 ? a.avgLast30Days.toFixed(2) : "—"}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{a.avgLast90Days > 0 ? a.avgLast90Days.toFixed(2) : "—"}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{a.best.toFixed(1)} / {a.worst.toFixed(1)}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: a.deviationPct < 0 ? C.red : C.teal }}>{a.deviationPct > 0 ? "+" : ""}{a.deviationPct.toFixed(1)}%</td>
+                    <td className="p-2.5">
+                      {a.alertLevel === "critical" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.red}22`, color: C.red }}>🔴 {tr("حرج", "Critical")}</span>}
+                      {a.alertLevel === "warning" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.amber}22`, color: C.amber }}>⚠ {tr("تحذير", "Warning")}</span>}
+                      {!a.alertLevel && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.teal}22`, color: C.teal }}>✓ {tr("طبيعي", "Normal")}</span>}
+                    </td>
+                  </tr>
+                  {a.alertLevel && (
+                    <tr style={{ background: a.alertLevel === "critical" ? `${C.red}08` : `${C.amber}08` }}>
+                      <td colSpan={8} className="px-2.5 pb-2.5">
+                        <span className="font-ui text-[10px] font-semibold" style={{ color: C.text }}>{tr("أسباب محتملة:", "Possible causes:")} </span>
+                        <span className="font-ui text-[10px]" style={{ color: C.muted }}>{explainFuelAlert(a, lang).join(" · ")}</span>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden space-y-2">
+            {fleetAnalytics.map(a => (
+              <div key={a.plate} className="rounded-xl p-3" style={{ background: a.alertLevel === "critical" ? `${C.red}14` : a.alertLevel === "warning" ? `${C.amber}14` : C.surface2 }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {a.plate}</span>
+                  {a.alertLevel === "critical" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.red}22`, color: C.red }}>🔴 {tr("حرج", "Critical")}</span>}
+                  {a.alertLevel === "warning" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.amber}22`, color: C.amber }}>⚠ {tr("تحذير", "Warning")}</span>}
+                  {!a.alertLevel && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.teal}22`, color: C.teal }}>✓ {tr("طبيعي", "Normal")}</span>}
+                </div>
+                <p className="font-ui text-[11px]" style={{ color: C.muted }}>
+                  {tr("الحالي", "Current")}: <span className="font-mono font-bold" style={{ color: C.text }}>{a.current.toFixed(2)}</span>
+                  {" · "}{tr("متوسط 30 يوم", "Avg 30d")}: <span className="font-mono" style={{ color: C.text }}>{a.avgLast30Days > 0 ? a.avgLast30Days.toFixed(2) : "—"}</span>
+                  {" · "}{tr("الانحراف", "Deviation")}: <span className="font-mono font-bold" style={{ color: a.deviationPct < 0 ? C.red : C.teal }}>{a.deviationPct > 0 ? "+" : ""}{a.deviationPct.toFixed(1)}%</span>
+                </p>
+                {a.alertLevel && (
+                  <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${C.border}` }}>
+                    <p className="font-ui text-[10px] font-semibold mb-1" style={{ color: C.text }}>{tr("أسباب محتملة:", "Possible causes:")}</p>
+                    <ul className="space-y-0.5">
+                      {explainFuelAlert(a, lang).map((reason, ri) => (
+                        <li key={ri} className="font-ui text-[10px]" style={{ color: C.muted }}>• {reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+            {tr(`* ⚠ تحذير عند انحراف ±${FUEL_ANALYTICS_CONFIG.warningDeviationPct}% عن المتوسط، 🔴 حرج عند ±${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%`, `* ⚠ Warning at ±${FUEL_ANALYTICS_CONFIG.warningDeviationPct}% deviation from average, 🔴 Critical at ±${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%`)}
+          </p>
+        </div>
+      )}
+
+      {fuelFlags.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("تنبيهات احتمال التلاعب", "Possible tampering flags")}</h3>
+          <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
+            {tr("أنماط مختلفة بتتفحص لوحدها — سجل ممكن يظهر في أكتر من تنبيه في نفس الوقت", "Independent patterns checked separately — one record can trigger more than one flag at once")}
+          </p>
+          <div className="space-y-2">
+            {fuelFlags.map((f, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: f.severity === "critical" ? `${C.red}14` : `${C.amber}14` }}>
+                <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: f.severity === "critical" ? `${C.red}22` : `${C.amber}22`, color: f.severity === "critical" ? C.red : C.amber }}>
+                  {f.severity === "critical" ? `🔴 ${tr("حرج", "Critical")}` : `⚠ ${tr("تحذير", "Warning")}`}
+                </span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {f.plate}</span>
+                <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
+                  {(FUEL_FLAG_LABELS[f.type] && FUEL_FLAG_LABELS[f.type][lang === "en" ? "en" : "ar"]) || f.type} — {f.detail[lang === "en" ? "en" : "ar"]}
+                </span>
+                <span className="font-ui text-[11px] shrink-0" style={{ color: C.muted }}>{f.date}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {virtualTanks.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: `${C.red}0d`, border: `1px solid ${C.red}44` }}>
+          <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.red }}>🛢️ {tr("التانك الافتراضي — وقود ناقص غير مفسّر", "Virtual fuel tank — unexplained missing fuel")}</h3>
+          <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
+            {tr("النظام بيحسب المفروض يكون فاضل كام لتر في التانك قبل كل تعبئة، ويقارنه باللي اتحط فعلاً. لو اتحط وقود أكتر من المساحة الفاضية المتوقعة، يبقى فيه وقود اختفى من غير ما يتصرف على مسافة — ده بيكشف حتى السرقة التدريجية البطيئة.", "The system estimates how much fuel should remain in the tank before each fill-up and compares it to what was actually added. If more fuel was added than the expected empty space, fuel disappeared without being driven — this catches even slow, gradual theft.")}
+          </p>
+          <div className="space-y-3">
+            {virtualTanks.map(t => (
+              <div key={t.plate} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {t.plate}</span>
+                  <span className="font-ui text-[11px]" style={{ color: C.muted }}>
+                    {tr("سعة التانك", "Tank")}: {t.capacity} {tr("لتر", "L")} · {tr("المعدل المرجعي", "Baseline")}: {t.baselineKmPerL.toFixed(2)} {tr("كم/لتر", "km/L")}
+                  </span>
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.red}22`, color: C.red }}>
+                    ≈ {t.totalGap.toFixed(1)} {tr("لتر ناقصة", "L missing")}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {t.discrepancies.slice(0, 5).map((e, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg p-2 flex-wrap" style={{ background: C.surface2 }}>
+                      <span className="font-ui text-[11px]" style={{ color: C.muted }}>{e.date}</span>
+                      {e.driver && <span className="font-ui text-[11px]" style={{ color: C.muted }}>· {e.driver}</span>}
+                      <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
+                        {tr("اتحط", "Added")} {e.litersAdded.toFixed(1)} {tr("لتر", "L")} · {tr("المتوقع", "Expected")} {e.expectedSpace.toFixed(1)} {tr("لتر", "L")}
+                      </span>
+                      <span className="font-mono text-[11px] font-bold" style={{ color: C.red }}>+{e.gap.toFixed(1)} {tr("لتر", "L")}</span>
+                    </div>
+                  ))}
+                  {t.discrepancies.length > 5 && (
+                    <p className="font-ui text-[11px]" style={{ color: C.muted }}>
+                      {tr(`+ ${t.discrepancies.length - 5} حالات تانية`, `+ ${t.discrepancies.length - 5} more cases`)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+            {tr(`* بيتفعّل بس للسيارات اللي متسجلة ليها سعة التانك من تاب "الأسطول". فرق أقل من ${VIRTUAL_TANK_TOLERANCE_L} لتر بيتجاهل كهامش طبيعي.`, `* Only active for vehicles with a tank capacity set in the "Fleet" tab. Gaps under ${VIRTUAL_TANK_TOLERANCE_L} L are ignored as normal margin.`)}
+          </p>
+        </div>
+      )}
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3">
