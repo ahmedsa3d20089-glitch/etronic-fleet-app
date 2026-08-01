@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -24,6 +25,15 @@
 <style>
   body { margin: 0; background: #12151B; }
 </style>
+<script>
+  // يمنع "ومضة" الخلفية الداكنة قبل ما React يبدأ، لو المستخدم كان مختار
+  // الوضع الفاتح قبل كده على الجهاز ده
+  try {
+    if (localStorage.getItem("etronic_theme") === "light") {
+      document.write('<style>body { background: #F3F4F6 !important; }</style>');
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
 <div id="root"></div>
@@ -83,10 +93,26 @@ const Package = makeIcon("📦");
 const CheckCircle = makeIcon("✅");
 const XCircle = makeIcon("❌");
 
-const C = {
+const DARK_PALETTE = {
   bg: "#12151B", surface: "#1A1F28", surface2: "#212837", border: "#2A313D",
   amber: "#2F7BF2", teal: "#3FA796", red: "#E15D44", text: "#EDEBE4", muted: "#8B93A3",
 };
+const LIGHT_PALETTE = {
+  bg: "#F3F4F6", surface: "#FFFFFF", surface2: "#EEF1F5", border: "#DCE0E6",
+  amber: "#1D5FD6", teal: "#0E8C7C", red: "#C8402A", text: "#171A21", muted: "#5B6472",
+};
+// C بتفضل نفس الـ object reference دايمًا (const)، وبس بنغيّر القيم اللي
+// جواها. الكومبوننتس كلها بتقرا C.text / C.bg... وقت الـ render، فلما
+// نغيّر القيم ونجبر الشجرة تتعمل remount (عن طريق key={theme})، كل
+// الألوان بتتحدث تلقائي من غير ما نلمس أي كومبوننت من الآلاف اللي بيستخدموا C.
+const C = { ...DARK_PALETTE };
+function applyTheme(theme) {
+  Object.assign(C, theme === "light" ? LIGHT_PALETTE : DARK_PALETTE);
+  try {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = C.bg;
+  } catch (e) {}
+}
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 .font-ui { font-family: 'Cairo', sans-serif; } .font-mono { font-family: 'JetBrains Mono', monospace; }
@@ -192,19 +218,74 @@ function computeMonthlyKmByPlate(odometerLogs) {
   return result.sort((a, b) => b.km - a.km);
 }
 
-function BarChart({ data, unit }) {
+// شارت حديث بديل للنسخة القديمة الثابتة: أعمدة SVG بتتحرك لما الصفحة
+// تفتح (CSS transition)، Tooltip بيظهر عند الوقوف بالماوس/اللمس فوق
+// أي عمود، وLegend تحت. الألوان بتتاخد من نظام الألوان الحالي للتطبيق
+// (المتغير C) — يعني لو أضفنا وضع فاتح (Light theme) مستقبلاً، الشارت
+// هيتلوّن معاه تلقائي من غير أي تعديل هنا.
+function FleetChart({ data, unit, legendItems }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [grown, setGrown] = useState(false);
+  React.useEffect(() => {
+    setGrown(false);
+    const t = setTimeout(() => setGrown(true), 60);
+    return () => clearTimeout(t);
+  }, [data.map(d => d.label + d.value).join(",")]);
+
   const max = Math.max(...data.map(d => d.value), 1);
+  const barWidth = 30, gap = 16, chartHeight = 140, topPad = 30, bottomPad = 22;
+  const svgWidth = Math.max(data.length * (barWidth + gap) + gap, 260);
+
   return (
-    <div className="space-y-2">
-      {data.map(d => (
-        <div key={d.label} className="flex items-center gap-2">
-          <span className="font-mono text-[11px] w-16 shrink-0 text-right" style={{ color: C.muted }}>{d.label}</span>
-          <div className="flex-1 rounded-full overflow-hidden" style={{ background: C.surface2, height: 14 }}>
-            <div style={{ width: `${(d.value / max) * 100}%`, height: "100%", background: d.color || C.teal, borderRadius: 999 }} />
-          </div>
-          <span className="font-mono text-[11px] w-16 shrink-0" style={{ color: d.color || C.text }}>{d.value.toFixed(2)}{unit || ""}</span>
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + topPad + bottomPad}`} width="100%" height={chartHeight + topPad + bottomPad} style={{ minWidth: svgWidth, display: "block" }}>
+          {/* خطوط الشبكة الأفقية */}
+          {[0, 0.25, 0.5, 0.75, 1].map(f => (
+            <line key={f} x1={0} x2={svgWidth} y1={topPad + chartHeight * (1 - f)} y2={topPad + chartHeight * (1 - f)}
+              stroke={C.border} strokeWidth={1} strokeDasharray="3,3" />
+          ))}
+          {data.map((d, i) => {
+            const h = grown ? Math.max((d.value / max) * chartHeight, 2) : 0;
+            const x = gap + i * (barWidth + gap);
+            const y = topPad + chartHeight - h;
+            const isHover = hoverIdx === i;
+            const barColor = d.color || C.teal;
+            return (
+              <g key={d.label}
+                onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
+                onTouchStart={() => setHoverIdx(isHover ? null : i)}
+                style={{ cursor: "pointer" }}>
+                <rect x={x} y={topPad} width={barWidth} height={chartHeight} fill="transparent" />
+                <rect x={x} y={y} width={barWidth} height={h} rx={6}
+                  fill={barColor} opacity={isHover ? 1 : 0.82}
+                  style={{ transition: "height 0.7s cubic-bezier(.22,1,.36,1), y 0.7s cubic-bezier(.22,1,.36,1), opacity 0.15s" }} />
+                <text x={x + barWidth / 2} y={topPad + chartHeight + 15} textAnchor="middle" fontSize="9" fill={C.muted} fontFamily="monospace">{d.label}</text>
+                {isHover && (
+                  <g style={{ transition: "opacity 0.15s" }}>
+                    <rect x={Math.max(2, Math.min(svgWidth - barWidth - 26, x - 8))} y={Math.max(0, y - 24)} width={barWidth + 16} height={20} rx={5}
+                      fill={C.surface} stroke={C.border} strokeWidth={1} />
+                    <text x={Math.max(2, Math.min(svgWidth - barWidth - 26, x - 8)) + (barWidth + 16) / 2} y={Math.max(0, y - 24) + 14}
+                      textAnchor="middle" fontSize="10" fontWeight="bold" fill={C.text} fontFamily="monospace">
+                      {d.value.toFixed(2)}{unit || ""}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      {legendItems && legendItems.length > 0 && (
+        <div className="flex items-center gap-4 mt-2 flex-wrap justify-center">
+          {legendItems.map(l => (
+            <div key={l.label} className="flex items-center gap-1.5">
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: l.color, display: "inline-block" }} />
+              <span className="font-ui text-[10px]" style={{ color: C.muted }}>{l.label}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -278,7 +359,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
         {kmChartData.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل سيارة من تاب "قراءة العداد"', 'Not enough odometer readings this month — log each vehicle\'s reading from the "Odometer" tab')}</p>
         ) : (
-          <BarChart data={kmChartData} unit={tr(" كم", " km")} />
+          <FleetChart data={kmChartData} unit={tr(" كم", " km")} />
         )}
       </div>
 
@@ -288,8 +369,13 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data this month — you need to enter the odometer reading with each fill-up")}</p>
         ) : (
           <>
-            <BarChart data={fuelChartData} unit={tr(" كم/لتر", " km/L")} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>{tr(`* الشريط الأحمر معناه انحراف ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+ عن متوسط السيارة نفسها، والبرتقالي ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+ — التفاصيل والأسباب المحتملة في تاب "التقارير"`, `* A red bar means ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+ deviation from that vehicle's own average, amber means ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+ — details and possible causes are in the "Reports" tab`)}</p>
+            <FleetChart data={fuelChartData} unit={tr(" كم/لتر", " km/L")}
+              legendItems={[
+                { label: tr("طبيعي", "Normal"), color: C.teal },
+                { label: tr(`تحذير ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`, `Warning ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`), color: C.amber },
+                { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), color: C.red },
+              ]} />
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("انحراف عن متوسط السيارة نفسها التاريخي — التفاصيل والأسباب المحتملة في تاب \"التقارير\"", "Deviation from that vehicle's own historical average — details and possible causes are in the \"Reports\" tab")}</p>
           </>
         )}
       </div>
@@ -923,25 +1009,63 @@ function SaveIndicator() {
   );
 }
 
-function download(filename, text) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+
+// تصدير Excel حقيقي (.xlsx) باستخدام ExcelJS — مش مجرد CSV بامتداد تاني.
+// بيدّي: رأس جدول Bold بخلفية لونية، عرض أعمدة تلقائي حسب المحتوى، تنسيق
+// أرقام حقيقي (مش نص)، ودعم كامل لاتجاه RTL للعربي. مرر الأرقام كـ Number
+// فعلي (مش String) عشان التنسيق والـ SUM في إكسل يشتغلوا صح.
+function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+function round1(n) { return Math.round((Number(n) || 0) * 10) / 10; }
+
+async function exportTableToXlsx(title, headers, rows, filename) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet((title || "Report").slice(0, 31), {
+    views: [{ rightToLeft: true }],
+  });
+
+  const headerRow = sheet.addRow(headers);
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: "FFE8EAED" }, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1B2430" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = { bottom: { style: "medium", color: { argb: "FF2AA9A0" } } };
+  });
+  headerRow.height = 24;
+
+  rows.forEach((r, ri) => {
+    const row = sheet.addRow(r);
+    row.eachCell(cell => {
+      cell.alignment = { horizontal: typeof cell.value === "number" ? "center" : "right", vertical: "middle" };
+      if (typeof cell.value === "number") {
+        cell.numFmt = Number.isInteger(cell.value) ? "#,##0" : "#,##0.00";
+      }
+      if (ri % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF10151C" } };
+      }
+    });
+  });
+
+  // عرض أعمدة تلقائي حسب أطول محتوى في العمود (حد أقصى وأدنى معقولين)
+  headers.forEach((h, i) => {
+    let maxLen = String(h || "").length;
+    rows.forEach(r => {
+      const v = r[i];
+      const len = String(v == null ? "" : v).length;
+      if (len > maxLen) maxLen = len;
+    });
+    sheet.getColumn(i + 1).width = Math.min(Math.max(maxLen + 3, 10), 42);
+  });
+
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
+  sheet.views = [{ rightToLeft: true, state: "frozen", ySplit: 1 }];
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-// أي حقل نصي ممكن يكون فيه فاصلة أو علامة تنصيص أو سطر جديد (زي الملاحظات
-// أو أسماء بعض العملاء) لازم يتحاط بين علامتي تنصيص عشان Excel يقرا كل عمود
-// في مكانه الصح، وإلا بيلخبط الأعمدة كلها. الدالة دي بتعمل كده تلقائيًا.
-function csvField(value) {
-  const s = String(value == null ? "" : value);
-  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-  return s;
-}
-function csvRow(fields) {
-  return fields.map(csvField).join(",");
 }
 
 async function exportTableToPdf(title, headers, rows, filename) {
@@ -2516,8 +2640,10 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   const [fuelFrom, setFuelFrom] = useState("");
   const [fuelTo, setFuelTo] = useState("");
   const [fuelPlate, setFuelPlate] = useState("");
-  const [kmFrom, setKmFrom] = useState("");
-  const [kmTo, setKmTo] = useState("");
+  const [kmFrom, setKmFrom] = useState("");   // فلتر التاريخ "من" لتقرير الكيلومترات اليومية
+  const [kmTo, setKmTo] = useState("");       // فلتر التاريخ "إلى"
+  const [kmMin, setKmMin] = useState("");     // فلتر الكيلومترات الفعلي — حد أدنى
+  const [kmMax, setKmMax] = useState("");     // فلتر الكيلومترات الفعلي — حد أقصى
   const [anFrom, setAnFrom] = useState("");
   const [anTo, setAnTo] = useState("");
   const [anPlate, setAnPlate] = useState("");
@@ -2582,19 +2708,24 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     return rows.sort((a, b) => b.to.localeCompare(a.to));
   }, [odometerLogs]);
 
-  const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
-    (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
-  ), [dailyByPlateAll, kmFrom, kmTo]);
-  function exportStatsCsv() {
-    const header = tr("السيارة,الحالي كم/لتر,المتوسط,أفضل,أسوأ,وقود الشهر لتر,مسافة الشهر كم,تكلفة الشهر,إجمالي التكلفة,تكلفة/كم,تكلفة/توصيلة,عدد التعبئات,متوسط يومي كم,متوسط يومي لتر,مقارنة بالشهر السابق %\n", "Vehicle,Current km/L,Average,Best,Worst,Monthly fuel L,Monthly distance km,Monthly cost,Total cost,Cost/km,Cost/delivery,Total refuels,Avg daily km,Avg daily L,Month-over-month %\n");
-    const rows = fleetStats.map(s => csvRow([
-      s.plate, s.current.toFixed(2), s.average.toFixed(2), s.best.toFixed(2), s.worst.toFixed(2),
-      s.monthlyFuelUsed.toFixed(1), s.monthlyDistance.toFixed(0), s.monthlyCost.toFixed(2), s.totalCost.toFixed(2),
-      s.costPerKm.toFixed(2), s.costPerDelivery.toFixed(2), s.totalRefuels,
-      s.avgDailyDistance.toFixed(1), s.avgDailyFuel.toFixed(2),
-      s.monthOverMonthPct === null ? "" : s.monthOverMonthPct.toFixed(1),
-    ])).join("\n");
-    download(tr("تقرير_إحصائيات_السيارات.csv", "vehicle_stats_report.csv"), "\uFEFF" + header + rows);
+  const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r => {
+    const inDateRange = (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo);
+    const min = kmMin !== "" ? Number(kmMin) : null;
+    const max = kmMax !== "" ? Number(kmMax) : null;
+    const inKmRange = (min === null || r.km >= min) && (max === null || r.km <= max);
+    return inDateRange && inKmRange;
+  }), [dailyByPlateAll, kmFrom, kmTo, kmMin, kmMax]);
+  function exportStatsXlsx() {
+    const headers = tr(["السيارة", "الحالي كم/لتر", "المتوسط", "أفضل", "أسوأ", "وقود الشهر لتر", "مسافة الشهر كم", "تكلفة الشهر", "إجمالي التكلفة", "تكلفة/كم", "تكلفة/توصيلة", "عدد التعبئات", "متوسط يومي كم", "متوسط يومي لتر", "مقارنة بالشهر السابق %"],
+      ["Vehicle", "Current km/L", "Average", "Best", "Worst", "Monthly fuel L", "Monthly distance km", "Monthly cost", "Total cost", "Cost/km", "Cost/delivery", "Total refuels", "Avg daily km", "Avg daily L", "Month-over-month %"]);
+    const rows = fleetStats.map(s => [
+      s.plate, round2(s.current), round2(s.average), round2(s.best), round2(s.worst),
+      round1(s.monthlyFuelUsed), Math.round(s.monthlyDistance), round2(s.monthlyCost), round2(s.totalCost),
+      round2(s.costPerKm), round2(s.costPerDelivery), s.totalRefuels,
+      round1(s.avgDailyDistance), round2(s.avgDailyFuel),
+      s.monthOverMonthPct === null ? "" : round1(s.monthOverMonthPct),
+    ]);
+    exportTableToXlsx(tr("إحصائيات السيارات", "Vehicle Statistics"), headers, rows, tr("تقرير_إحصائيات_السيارات.xlsx", "vehicle_stats_report.xlsx"));
   }
   function exportStatsPdf() {
     exportTableToPdf(
@@ -2605,14 +2736,15 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     );
   }
 
-  function exportAnalyticsCsv() {
-    const header = tr("السيارة,الحالي كم/لتر,متوسط آخر 10,متوسط 30 يوم,متوسط 90 يوم,أفضل,أسوأ,الانحراف %,الحالة,أسباب محتملة\n", "Vehicle,Current km/L,Avg last 10,Avg 30d,Avg 90d,Best,Worst,Deviation %,Status,Possible causes\n");
+  function exportAnalyticsXlsx() {
+    const headers = tr(["السيارة", "الحالي كم/لتر", "متوسط آخر 10", "متوسط 30 يوم", "متوسط 90 يوم", "أفضل", "أسوأ", "الانحراف %", "الحالة", "أسباب محتملة"],
+      ["Vehicle", "Current km/L", "Avg last 10", "Avg 30d", "Avg 90d", "Best", "Worst", "Deviation %", "Status", "Possible causes"]);
     const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
-    const rows = fleetAnalytics.map(a => csvRow([
-      a.plate, a.current.toFixed(2), a.avgLast10.toFixed(2), a.avgLast30Days.toFixed(2), a.avgLast90Days.toFixed(2),
-      a.best.toFixed(2), a.worst.toFixed(2), a.deviationPct.toFixed(1), statusText(a.alertLevel), explainFuelAlert(a, lang).join(" / "),
-    ])).join("\n");
-    download(tr("تقرير_المتوسطات_والانحراف.csv", "averages_deviation_report.csv"), "\uFEFF" + header + rows);
+    const rows = fleetAnalytics.map(a => [
+      a.plate, round2(a.current), round2(a.avgLast10), round2(a.avgLast30Days), round2(a.avgLast90Days),
+      round2(a.best), round2(a.worst), round1(a.deviationPct), statusText(a.alertLevel), explainFuelAlert(a, lang).join(" / "),
+    ]);
+    exportTableToXlsx(tr("المتوسطات والانحراف", "Averages & Deviation"), headers, rows, tr("تقرير_المتوسطات_والانحراف.xlsx", "averages_deviation_report.xlsx"));
   }
   function exportAnalyticsPdf() {
     const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
@@ -2623,15 +2755,15 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
       tr("تقرير_المتوسطات_والانحراف.pdf", "averages_deviation_report.pdf")
     );
   }
-  function exportFlagsCsv() {
-    const header = tr("الخطورة,السيارة,التاريخ,نوع التنبيه,التفاصيل\n", "Severity,Vehicle,Date,Flag type,Details\n");
-    const rows = fuelFlags.map(f => csvRow([
+  function exportFlagsXlsx() {
+    const headers = tr(["الخطورة", "السيارة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]);
+    const rows = fuelFlags.map(f => [
       f.severity === "critical" ? tr("حرج", "Critical") : tr("تحذير", "Warning"),
       f.plate, f.date,
       (FUEL_FLAG_LABELS[f.type] && FUEL_FLAG_LABELS[f.type][lang === "en" ? "en" : "ar"]) || f.type,
       f.detail[lang === "en" ? "en" : "ar"],
-    ])).join("\n");
-    download(tr("تقرير_تنبيهات_التلاعب.csv", "tampering_flags_report.csv"), "\uFEFF" + header + rows);
+    ]);
+    exportTableToXlsx(tr("تنبيهات التلاعب", "Tampering Flags"), headers, rows, tr("تقرير_تنبيهات_التلاعب.xlsx", "tampering_flags_report.xlsx"));
   }
   function exportFlagsPdf() {
     exportTableToPdf(
@@ -2646,15 +2778,16 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
       tr("تقرير_تنبيهات_التلاعب.pdf", "tampering_flags_report.pdf")
     );
   }
-  function exportTankCsv() {
-    const header = tr("السيارة,سعة التانك,المعدل المرجعي,التاريخ,السائق,اتحط لتر,المتوقع لتر,الفرق لتر\n", "Vehicle,Tank capacity,Baseline km/L,Date,Driver,Added L,Expected L,Gap L\n");
+  function exportTankXlsx() {
+    const headers = tr(["السيارة", "سعة التانك", "المعدل المرجعي", "التاريخ", "السائق", "اتحط لتر", "المتوقع لتر", "الفرق لتر"],
+      ["Vehicle", "Tank capacity", "Baseline km/L", "Date", "Driver", "Added L", "Expected L", "Gap L"]);
     const rows = [];
     virtualTanks.forEach(t => {
       t.discrepancies.forEach(e => {
-        rows.push(csvRow([t.plate, t.capacity, t.baselineKmPerL.toFixed(2), e.date, e.driver || "", e.litersAdded.toFixed(1), e.expectedSpace.toFixed(1), e.gap.toFixed(1)]));
+        rows.push([t.plate, t.capacity, round2(t.baselineKmPerL), e.date, e.driver || "", round1(e.litersAdded), round1(e.expectedSpace), round1(e.gap)]);
       });
     });
-    download(tr("تقرير_التانك_الافتراضي.csv", "virtual_tank_report.csv"), "\uFEFF" + header + rows.join("\n"));
+    exportTableToXlsx(tr("التانك الافتراضي", "Virtual Tank"), headers, rows, tr("تقرير_التانك_الافتراضي.xlsx", "virtual_tank_report.xlsx"));
   }
   function exportTankPdf() {
     const rows = [];
@@ -2670,15 +2803,16 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
       tr("تقرير_التانك_الافتراضي.pdf", "virtual_tank_report.pdf")
     );
   }
-  function exportPerFillCsv() {
-    const header = tr("السيارة,السائق,التاريخ,عداد سابق,عداد حالي,الكيلومترات,اللترات,كم/لتر\n", "Vehicle,Driver,Date,Previous odometer,Current odometer,Km,Liters,Km/L\n");
-    const rows = perFill.map(r => csvRow([r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, r.kmPerLiter.toFixed(2)])).join("\n");
-    download(tr("تقرير_كل_تعبئة_وقود.csv", "per_fillup_report.csv"), "\uFEFF" + header + rows);
+  function exportPerFillXlsx() {
+    const headers = tr(["السيارة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر"],
+      ["Vehicle", "Driver", "Date", "Previous odometer", "Current odometer", "Km", "Liters", "Km/L"]);
+    const rows = perFill.map(r => [r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, round2(r.kmPerLiter)]);
+    exportTableToXlsx(tr("كل تعبئة وقود", "Per Fill-up"), headers, rows, tr("تقرير_كل_تعبئة_وقود.xlsx", "per_fillup_report.xlsx"));
   }
-  function exportDailyCsv() {
-    const header = tr("السيارة,من تاريخ,إلى تاريخ,كيلومترات مقطوعة,متوسط يومي\n", "Vehicle,From,To,Km driven,Daily average\n");
-    const rows = dailyByPlate.map(r => csvRow([r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)])).join("\n");
-    download(tr("تقرير_الكيلومترات_اليومية.csv", "daily_km_report.csv"), "\uFEFF" + header + rows);
+  function exportDailyXlsx() {
+    const headers = tr(["السيارة", "من تاريخ", "إلى تاريخ", "كيلومترات مقطوعة", "متوسط يومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]);
+    const rows = dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, round1(r.avgPerDay)]);
+    exportTableToXlsx(tr("الكيلومترات اليومية", "Daily Kilometers"), headers, rows, tr("تقرير_الكيلومترات_اليومية.xlsx", "daily_km_report.xlsx"));
   }
   function exportPerFillPdf() {
     exportTableToPdf(
@@ -2766,7 +2900,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إحصائيات تفصيلية لكل سيارة", "Detailed statistics per vehicle")}</h3>
             <div className="flex items-center gap-2">
-              <button onClick={exportStatsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportStatsXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportStatsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
             </div>
           </div>
@@ -2839,7 +2973,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
             <div className="flex items-center gap-2">
-              <button onClick={exportAnalyticsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportAnalyticsXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportAnalyticsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
             </div>
           </div>
@@ -2930,7 +3064,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("تنبيهات احتمال التلاعب", "Possible tampering flags")}</h3>
             <div className="flex items-center gap-2">
-              <button onClick={exportFlagsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportFlagsXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportFlagsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
             </div>
           </div>
@@ -2959,7 +3093,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <h3 className="font-ui font-bold text-sm" style={{ color: C.red }}>🛢️ {tr("التانك الافتراضي — وقود ناقص غير مفسّر", "Virtual fuel tank — unexplained missing fuel")}</h3>
             <div className="flex items-center gap-2">
-              <button onClick={exportTankCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportTankXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportTankPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
             </div>
           </div>
@@ -3008,7 +3142,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("كل تعبئة وقود لوحدها", "Every fill-up individually")}</h3>
           <div className="flex items-center gap-2">
-            <button onClick={exportPerFillCsv} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+            <button onClick={exportPerFillXlsx} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
             <button onClick={exportPerFillPdf} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
@@ -3076,16 +3210,29 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("الكيلومترات اليومية", "Daily kilometers")}</h3>
           <div className="flex items-center gap-2">
-            <button onClick={exportDailyCsv} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+            <button onClick={exportDailyXlsx} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
             <button onClick={exportDailyPdf} disabled={!dailyByPlate.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
           <input type="date" value={kmFrom} onChange={e => setKmFrom(e.target.value)} placeholder={tr("من تاريخ", "From")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={kmTo} onChange={e => setKmTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <input type="number" value={kmMin} onChange={e => setKmMin(e.target.value)} placeholder={tr("أقل كيلومترات", "Min km")}
+            className="flex-1 rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="number" value={kmMax} onChange={e => setKmMax(e.target.value)} placeholder={tr("أكتر كيلومترات", "Max km")}
+            className="flex-1 rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          {(kmFrom || kmTo || kmMin !== "" || kmMax !== "") && (
+            <button onClick={() => { setKmFrom(""); setKmTo(""); setKmMin(""); setKmMax(""); }}
+              className="px-2.5 py-2 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>
+              {tr("مسح الفلاتر", "Clear filters")}
+            </button>
+          )}
+        </div>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{dailyByPlate.length} {tr("نتيجة", "results")}</p>
         {dailyByPlate.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش بيانات كفاية في الفترة دي — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"', 'Not enough data in this period — log odometer readings regularly from the "Odometer" tab')}</p>
         ) : (
@@ -3164,13 +3311,13 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const deliveredCount = filtered.filter(d => d.status === "تم التسليم").length;
   const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
 
-  function exportCsv() {
-    const header = tr("التاريخ والوقت,العميل,الكود,الحالة,المستلم,المندوب,ملاحظات\n", "Date & time,Customer,Code,Status,Recipient,Rep,Notes\n");
+  function exportXlsx() {
+    const headers = tr(["التاريخ والوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "ملاحظات"], ["Date & time", "Customer", "Code", "Status", "Recipient", "Rep", "Notes"]);
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return csvRow([(d.deliveredAt || "").replace("T", " ").slice(0, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""]);
-    }).join("\n");
-    download(tr("تقرير_التسليمات.csv", "delivery_report.csv"), "\uFEFF" + header + rows);
+      return [(d.deliveredAt || "").replace("T", " ").slice(0, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""];
+    });
+    exportTableToXlsx(tr("تقرير التسليمات", "Delivery Report"), headers, rows, tr("تقرير_التسليمات.xlsx", "delivery_report.xlsx"));
   }
   function exportPdf() {
     exportTableToPdf(
@@ -3203,7 +3350,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("فلترة وبحث", "Search & filter")}</h3>
           <div className="flex items-center gap-2">
-            <button onClick={exportCsv} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+            <button onClick={exportXlsx} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
             <button onClick={exportPdf} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
@@ -3269,7 +3416,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
 }
 
 
-function SettingsTab({ currentUser, lang, setLang }) {
+function SettingsTab({ currentUser, lang, setLang, theme, setTheme }) {
   function forceUpdate() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
@@ -3308,8 +3455,29 @@ function SettingsTab({ currentUser, lang, setLang }) {
         </div>
         <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
           {lang === "en"
-            ? "This is a first pass: the sidebar menu, dashboard, and this settings page are translated. Other tabs are still in Arabic — tell me which ones to translate next and I'll extend it screen by screen."
-            : "دي أول خطوة: القائمة الجانبية ولوحة التحكم وصفحة الإعدادات دي بقوا بالإنجليزي. باقي التابات لسه عربي — قولّي عايز تبدأ بأي تاب وهترجمه."}
+            ? "The whole app is translated — pages that use terms from the original database (like maintenance type or vehicle status) keep those exact stored values, only their on-screen label changes with the language."
+            : "التطبيق كامل مترجم — الشاشات اللي بتستخدم مصطلحات من قاعدة البيانات الأصلية (زي نوع الصيانة أو حالة السيارة) بتحتفظ بنفس القيمة المخزنة، وبس شكلها على الشاشة بيتغيّر مع اللغة."}
+        </p>
+      </div>
+
+      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>
+          {lang === "en" ? "Appearance" : "المظهر"}
+        </h3>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setTheme("dark")}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-ui text-sm font-semibold"
+            style={{ background: theme === "dark" ? `${C.teal}22` : C.surface2, color: theme === "dark" ? C.teal : C.muted, border: `1px solid ${theme === "dark" ? C.teal : C.border}` }}>
+            🌙 {lang === "en" ? "Dark" : "داكن"}
+          </button>
+          <button onClick={() => setTheme("light")}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-ui text-sm font-semibold"
+            style={{ background: theme === "light" ? `${C.teal}22` : C.surface2, color: theme === "light" ? C.teal : C.muted, border: `1px solid ${theme === "light" ? C.teal : C.border}` }}>
+            ☀️ {lang === "en" ? "Light" : "فاتح"}
+          </button>
+        </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+          {lang === "en" ? "Applies across the whole app immediately and is remembered on this device." : "بيتطبّق على التطبيق كله فورًا، وبيفضل متذكر اختيارك على الجهاز ده."}
         </p>
       </div>
 
@@ -3538,7 +3706,22 @@ function useLang() {
   return [lang, setLang];
 }
 
-function EtronicDashboard({ user, isAdmin, permissions }) {
+function useTheme() {
+  const [theme, setThemeState] = useState(() => {
+    let initial = "dark";
+    try { initial = localStorage.getItem("etronic_theme") || "dark"; } catch (e) {}
+    applyTheme(initial);
+    return initial;
+  });
+  function setTheme(next) {
+    applyTheme(next);
+    setThemeState(next);
+    try { localStorage.setItem("etronic_theme", next); } catch (e) {}
+  }
+  return [theme, setTheme];
+}
+
+function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [tab, setTab] = useState("dash");
   const [lang, setLang] = useLang();
   const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreCollection("etronic_fuel", () => []);
@@ -3580,7 +3763,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
                   : tab === "deliveries"
                     ? { deliveries, setDeliveries, isAdmin, lang }
                     : tab === "settings"
-                    ? { currentUser: user, lang, setLang }
+                    ? { currentUser: user, lang, setLang, theme, setTheme }
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user, auditLog, lang }
                       : tab === "dash"
@@ -3897,6 +4080,7 @@ function AdminTab({ accounts, setAccounts, currentUser, auditLog, lang }) {
 
 function AuthGate() {
   const [lang] = useLang();
+  const [theme, setTheme] = useTheme();
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [user, setUser] = useState(undefined);
   const [accountStatus, setAccountStatus] = useState(undefined);
@@ -3979,7 +4163,7 @@ function AuthGate() {
     );
   }
   if (!user) return <LoginScreen errorMsg={errorMsg} />;
-  return <EtronicDashboard user={user} isAdmin={accountStatus.role === "admin"} permissions={accountStatus.permissions || []} />;
+  return <EtronicDashboard user={user} isAdmin={accountStatus.role === "admin"} permissions={accountStatus.permissions || []} theme={theme} setTheme={setTheme} />;
 }
 
 class ErrorBoundary extends React.Component {
