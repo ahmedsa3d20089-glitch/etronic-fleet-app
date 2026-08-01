@@ -802,7 +802,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
   );
 }
 
-function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
+function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicles }) {
   const TYPES = ["صيانة دورية", "إصلاح عطل", "تغيير الزيت", "إطارات", "أخرى"];
   const OIL_INTERVAL_KM = 2000;
   const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
@@ -814,11 +814,16 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
 
   const oilAlerts = useMemo(() => {
     const alerts = [];
+    const odoLogs = odometerLogs || [];
     vehicles.forEach(v => {
       const plate = v.plate;
-      const fuelForPlate = fuelRecords.filter(r => r.plate === plate && r.odometer);
-      if (fuelForPlate.length === 0) return;
-      const currentOdometer = Math.max(...fuelForPlate.map(r => Number(r.odometer)));
+      // العداد الحالي = أعلى قراءة مسجَّلة لهذه المركبة، من عمليات التعبئة
+      // أو من تبويب "قراءة العداد" المخصص — وليس من مصدر واحد فقط.
+      const fuelReadings = fuelRecords.filter(r => r.plate === plate && r.odometer).map(r => Number(r.odometer));
+      const odoReadings = odoLogs.filter(l => l.plate === plate && l.odometer).map(l => Number(l.odometer));
+      const allReadings = [...fuelReadings, ...odoReadings];
+      if (allReadings.length === 0) return;
+      const currentOdometer = Math.max(...allReadings);
 
       const oilChanges = records.filter(r => r.plate === plate && r.type === "تغيير الزيت" && r.odometer);
       const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
@@ -829,7 +834,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
       }
     });
     return alerts.sort((a, b) => b.kmSinceOil - a.kmSinceOil);
-  }, [records, fuelRecords]);
+  }, [records, fuelRecords, odometerLogs, vehicles]);
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -1376,7 +1381,7 @@ function EtronicDashboard({ user, isAdmin }) {
   const extraProps = tab === "fuel"
     ? { records: fuelRecords, setRecords: setFuelRecords, vehicles, employees }
     : tab === "maintenance"
-      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles }
+      ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, odometerLogs, vehicles }
       : tab === "route"
         ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers }
         : tab === "customers"

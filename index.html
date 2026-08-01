@@ -22,6 +22,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <style>
   body { margin: 0; background: #12151B; }
 </style>
@@ -51,8 +52,15 @@ const firebaseConfig = {
   appId: "1:987528911688:web:c53fa37e6e3ae4a76df17d"
 };
 
+// مفتاح Web Push VAPID — يُنشأ من: Firebase Console › إعدادات المشروع ›
+// Cloud Messaging › Web configuration › Web Push certificates › Generate key pair.
+// طالما القيمة لسه "REPLACE_WITH_VAPID_KEY"، نظام الإشعارات المحلي (داخل المتصفح
+// المفتوح) يعمل عاديًا، لكن إشعارات Push الحقيقية (والتطبيق مغلق) لن تُفعَّل
+// إلا بعد وضع المفتاح الفعلي هنا.
+const FCM_VAPID_KEY = "REPLACE_WITH_VAPID_KEY";
+
 let firebaseInitError = null;
-let auth, secondaryAuth, db;
+let auth, secondaryAuth, db, messaging;
 try {
   firebase.initializeApp(firebaseConfig);
   // Secondary app instance so admin can create employee accounts without being signed out
@@ -60,6 +68,9 @@ try {
   auth = firebase.auth();
   secondaryAuth = secondaryApp.auth();
   db = firebase.firestore();
+  if (firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported()) {
+    messaging = firebase.messaging();
+  }
 } catch (e) {
   firebaseInitError = e;
 }
@@ -325,19 +336,10 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   const overdueMaintenance = useMemo(() =>
     (maintenanceRecords || []).filter(r => r.nextDue && r.nextDue < today).length,
     [maintenanceRecords, today]);
-  const oilAlertsCount = useMemo(() => {
-    const OIL_INTERVAL_KM = 2000;
-    let count = 0;
-    (vehicles || []).forEach(v => {
-      const logsForPlate = (odometerLogs || []).filter(l => l.plate === v.plate && l.odometer);
-      if (logsForPlate.length === 0) return;
-      const currentOdometer = Math.max(...logsForPlate.map(l => Number(l.odometer)));
-      const oilChanges = (maintenanceRecords || []).filter(r => r.plate === v.plate && r.type === "تغيير الزيت" && r.odometer);
-      const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
-      if (currentOdometer - lastOilOdometer >= OIL_INTERVAL_KM) count++;
-    });
-    return count;
-  }, [vehicles, odometerLogs, maintenanceRecords]);
+  const oilAlertsCount = useMemo(
+    () => computeOilAlerts(vehicles, odometerLogs, fuelRecords, maintenanceRecords).length,
+    [vehicles, odometerLogs, fuelRecords, maintenanceRecords]
+  );
 
   const fuelAnomalyCount = useMemo(() =>
     fleetAnalytics.filter(a => a.alertLevel).length,
@@ -1586,25 +1588,10 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = records.filter(r => r.nextDue && r.nextDue >= today).length;
 
-  const oilAlerts = useMemo(() => {
-    const alerts = [];
-    const logs = odometerLogs || [];
-    vehicles.forEach(v => {
-      const plate = v.plate;
-      const logsForPlate = logs.filter(l => l.plate === plate && l.odometer);
-      if (logsForPlate.length === 0) return;
-      const currentOdometer = Math.max(...logsForPlate.map(l => Number(l.odometer)));
-
-      const oilChanges = records.filter(r => r.plate === plate && r.type === "تغيير الزيت" && r.odometer);
-      const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
-
-      const kmSinceOil = currentOdometer - lastOilOdometer;
-      if (kmSinceOil >= OIL_INTERVAL_KM) {
-        alerts.push({ plate, kmSinceOil, currentOdometer, lastOilOdometer });
-      }
-    });
-    return alerts.sort((a, b) => b.kmSinceOil - a.kmSinceOil);
-  }, [records, odometerLogs, vehicles]);
+  const oilAlerts = useMemo(
+    () => computeOilAlerts(vehicles, odometerLogs, fuelRecords, records),
+    [vehicles, odometerLogs, fuelRecords, records]
+  );
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -2415,6 +2402,33 @@ function computeFleetFuelAnalytics(vehicles, fuelRecords) {
     .map(v => computeVehicleFuelAnalytics(v.plate, fuelRecords))
     .filter(a => a.hasData)
     .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct));
+}
+
+const OIL_INTERVAL_KM = 2000;
+
+// مصدر واحد موحَّد لحساب تنبيهات تغيير الزيت — يُستخدم في كل الشاشات
+// (لوحة التحكم، الصيانة، الإشعارات) بدل تكرار المنطق في كل مكان على حدة،
+// لضمان أن كل الشاشات تتفق دائمًا على نفس النتيجة.
+// العداد الحالي = أعلى قراءة مسجَّلة لكل مركبة، من تبويب "قراءة العداد"
+// المخصص أو من حقل العداد الإلزامي المُدخل مع كل عملية تعبئة وقود.
+function computeOilAlerts(vehicles, odometerLogs, fuelRecords, maintenanceRecords) {
+  const alerts = [];
+  (vehicles || []).forEach(v => {
+    const odoReadings = (odometerLogs || []).filter(l => l.plate === v.plate && l.odometer).map(l => Number(l.odometer));
+    const fuelReadings = (fuelRecords || []).filter(f => f.plate === v.plate && f.odometer).map(f => Number(f.odometer));
+    const allReadings = [...odoReadings, ...fuelReadings];
+    if (allReadings.length === 0) return;
+    const currentOdometer = Math.max(...allReadings);
+
+    const oilChanges = (maintenanceRecords || []).filter(r => r.plate === v.plate && r.type === "تغيير الزيت" && r.odometer);
+    const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
+
+    const kmSinceOil = currentOdometer - lastOilOdometer;
+    if (kmSinceOil >= OIL_INTERVAL_KM) {
+      alerts.push({ plate: v.plate, kmSinceOil, currentOdometer, lastOilOdometer });
+    }
+  });
+  return alerts.sort((a, b) => b.kmSinceOil - a.kmSinceOil);
 }
 
 const FUEL_FLAG_LABELS = {
@@ -3421,7 +3435,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
 }
 
 
-function SettingsTab({ currentUser, lang, setLang, theme, setTheme }) {
+function SettingsTab({ currentUser, lang, setLang, theme, setTheme, notifPermission, requestNotifPermission }) {
   function forceUpdate() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
@@ -3483,6 +3497,38 @@ function SettingsTab({ currentUser, lang, setLang, theme, setTheme }) {
         </div>
         <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
           {lang === "en" ? "Applies across the whole app immediately and is remembered on this device." : "يُطبَّق على التطبيق بالكامل فورًا، ويبقى محفوظًا كاختيارك على هذا الجهاز."}
+        </p>
+      </div>
+
+      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>
+          {lang === "en" ? "Alert notifications" : "إشعارات التنبيه"}
+        </h3>
+        {notifPermission === "granted" ? (
+          <p className="font-ui text-sm font-semibold" style={{ color: C.teal }}>
+            ✓ {lang === "en" ? "Enabled on this device" : "مفعّلة على هذا الجهاز"}
+          </p>
+        ) : notifPermission === "denied" ? (
+          <p className="font-ui text-xs" style={{ color: C.red }}>
+            {lang === "en"
+              ? "Blocked by the browser. Enable notifications for this site from your browser settings."
+              : "تم حظرها من إعدادات المتصفح. لتفعيلها، اسمح بالإشعارات لهذا الموقع من إعدادات المتصفح."}
+          </p>
+        ) : notifPermission === "unsupported" ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>
+            {lang === "en" ? "Not supported on this device/browser." : "غير مدعومة على هذا الجهاز أو المتصفح."}
+          </p>
+        ) : (
+          <button onClick={requestNotifPermission}
+            className="px-4 py-2 rounded-lg font-ui text-sm font-semibold"
+            style={{ background: `${C.teal}22`, color: C.teal, border: `1px solid ${C.teal}` }}>
+            🔔 {lang === "en" ? "Enable alert notifications" : "تفعيل إشعارات التنبيه"}
+          </button>
+        )}
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+          {lang === "en"
+            ? "Covers: overdue maintenance, critical fuel deviation, unexplained fuel loss, and failed deliveries — sent directly by the browser while it's running."
+            : "تغطي: الصيانة المتأخرة، الانحراف الحرج في استهلاك الوقود، نقص الوقود غير المفسَّر، وتعذر التسليم — تُرسَل مباشرة من المتصفح طالما يعمل."}
         </p>
       </div>
 
@@ -3726,6 +3772,166 @@ function useTheme() {
   return [theme, setTheme];
 }
 
+// ============================================================
+// نظام إشعارات التنبيه داخل التطبيق (In-App Push Notifications)
+// ============================================================
+// يعمل بالكامل من طرف المتصفح دون الحاجة لخادم خلفي: يراقب نفس البيانات
+// المعروضة في الشاشات لحظيًا (عبر Firestore)، وعند ظهور حالة جديدة تستحق
+// تنبيهًا (صيانة متأخرة، انحراف حرج في الوقود، نقص وقود غير مفسَّر، تعذر
+// تسليم) يُطلق إشعار متصفح حقيقي عبر Service Worker — حتى لو كان التطبيق
+// في الخلفية أو التبويب غير مفتوح، طالما المتصفح يعمل.
+function useNotificationPermission() {
+  const [permission, setPermission] = useState(() =>
+    typeof Notification !== "undefined" ? Notification.permission : "unsupported"
+  );
+  async function requestPermission() {
+    if (typeof Notification === "undefined") return "unsupported";
+    if (Notification.permission === "granted") { setPermission("granted"); return "granted"; }
+    try {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      return result;
+    } catch (e) {
+      setPermission("denied");
+      return "denied";
+    }
+  }
+  return [permission, requestPermission];
+}
+
+async function showFleetNotification(title, body, tag, data) {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const options = {
+    body,
+    icon: "./icon-192.png",
+    badge: "./icon-192.png",
+    tag,
+    data: data || {},
+    dir: "rtl",
+    lang: "ar",
+    renotify: false,
+  };
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, options);
+    } else {
+      new Notification(title, options);
+    }
+  } catch (e) {
+    // فشل صامت — لا نريد كسر التطبيق بسبب مشكلة في الإشعارات
+  }
+}
+
+// يسجّل جهاز المستخدم للحصول على Push حقيقي (يصل حتى لو التطبيق مغلق تمامًا)
+// عبر Firebase Cloud Messaging، ويحفظ الـ token في Firestore حتى يقدر الخادم
+// الخلفي (Cloud Functions) يرسل له إشعارات مباشرة. لا يفعل شيئًا إذا لم يُضبط
+// FCM_VAPID_KEY بعد، أو لو المتصفح لا يدعم Push.
+async function registerFcmToken(currentUser) {
+  if (!messaging || !currentUser || !currentUser.email) return;
+  if (FCM_VAPID_KEY === "REPLACE_WITH_VAPID_KEY") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token || !db) return;
+    await db.collection("etronic_fcm_tokens").doc(token).set({
+      token,
+      email: currentUser.email,
+      uid: currentUser.uid || "",
+      platform: navigator.userAgent || "",
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    // فشل صامت (رفض الإذن، أو المتصفح لا يدعم Push، أو خطأ شبكة) — لا يوقف باقي التطبيق
+  }
+}
+
+// يقارن كل مجموعة تنبيهات بما سبق إرساله (محفوظ في localStorage) ويُطلق
+// إشعارًا فعليًا للحالات الجديدة فقط، حتى لا تتكرر نفس الرسالة عند كل تحديث.
+function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries, enabled }) {
+  const seenRef = React.useRef(null);
+  if (seenRef.current === null) {
+    try {
+      seenRef.current = new Set(JSON.parse(localStorage.getItem("etronic_notified_keys") || "[]"));
+    } catch (e) {
+      seenRef.current = new Set();
+    }
+  }
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    const seen = seenRef.current;
+    let changed = false;
+
+    (oilAlerts || []).forEach(a => {
+      // إعادة التنبيه كل 500 كم إضافية بعد تجاوز الموعد، بدل تنبيه واحد فقط عند أول تجاوز
+      const key = `oil:${a.plate}:${Math.floor(a.kmSinceOil / 500)}`;
+      if (!seen.has(key)) {
+        showFleetNotification(
+          "⚠ صيانة متأخرة",
+          `المركبة ${a.plate} تجاوزت موعد تغيير الزيت بمقدار ${a.kmSinceOil.toFixed(0)} كم`,
+          `oil-${a.plate}`,
+          { screen_to_open: "maintenance", entity_id: a.plate }
+        );
+        seen.add(key);
+        changed = true;
+      }
+    });
+
+    (criticalFuelAlerts || []).forEach(a => {
+      const lastDate = a.rows && a.rows.length ? a.rows[a.rows.length - 1].date : "";
+      const key = `fuel:${a.plate}:${lastDate}`;
+      if (!seen.has(key)) {
+        showFleetNotification(
+          "🔴 اشتباه تلاعب في الوقود",
+          `المركبة ${a.plate} سجّلت انحرافًا حرجًا بنسبة ${a.deviationPct.toFixed(0)}% عن معدلها الطبيعي`,
+          `fuel-${a.plate}-${lastDate}`,
+          { screen_to_open: "reports", entity_id: a.plate }
+        );
+        seen.add(key);
+        changed = true;
+      }
+    });
+
+    (virtualTankAlerts || []).forEach(t => {
+      const last = t.discrepancies && t.discrepancies[t.discrepancies.length - 1]; // الأحدث (المصفوفة بترتيب تصاعدي بالتاريخ)
+      if (!last) return;
+      const key = `tank:${t.plate}:${last.date}`;
+      if (!seen.has(key)) {
+        showFleetNotification(
+          "🛢️ نقص وقود غير مفسَّر",
+          `المركبة ${t.plate} — فرق ${last.gap.toFixed(1)} لتر بين الكمية المتوقعة والكمية المضافة فعليًا`,
+          `tank-${t.plate}-${last.date}`,
+          { screen_to_open: "reports", entity_id: t.plate }
+        );
+        seen.add(key);
+        changed = true;
+      }
+    });
+
+    (failedDeliveries || []).forEach(d => {
+      const key = `delivery:${d.id}`;
+      if (!seen.has(key)) {
+        showFleetNotification(
+          "⚠ تعذر التسليم",
+          `لم يتم تسليم طلب ${d.customerName || ""} — المندوب: ${d.repName || ""}`,
+          `delivery-${d.id}`,
+          { screen_to_open: "deliveries", entity_id: String(d.id) }
+        );
+        seen.add(key);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      try {
+        // نحتفظ بآخر 500 مفتاح فقط لتفادي تضخّم localStorage مع الوقت
+        localStorage.setItem("etronic_notified_keys", JSON.stringify([...seen].slice(-500)));
+      } catch (e) {}
+    }
+  }, [oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries, enabled]);
+}
+
 function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [tab, setTab] = useState("dash");
   const [lang, setLang] = useLang();
@@ -3741,6 +3947,63 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [auditLog] = useFirestoreCollection("etronic_audit_log", () => []);
   const [deliveries, setDeliveries] = useFirestoreCollection("etronic_deliveries", () => []);
   const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
+
+  // إشعارات التنبيه — تُحسب مرة واحدة هنا على مستوى التطبيق كله (وليس فقط
+  // داخل التبويب المفتوح حاليًا)، حتى تُطلَق حتى لو كان المستخدم في شاشة أخرى.
+  const [notifPermission, requestNotifPermission] = useNotificationPermission();
+  const oilAlertsForNotify = useMemo(
+    () => computeOilAlerts(vehicles, odometerLogs, fuelRecords, maintenanceRecords),
+    [vehicles, odometerLogs, fuelRecords, maintenanceRecords]
+  );
+  const fleetAnalyticsForNotify = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
+  const criticalFuelAlertsForNotify = useMemo(
+    () => fleetAnalyticsForNotify.filter(a => a.alertLevel === "critical"),
+    [fleetAnalyticsForNotify]
+  );
+  const virtualTankAlertsForNotify = useMemo(() => computeFleetVirtualTanks(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
+  const failedDeliveriesForNotify = useMemo(
+    () => (deliveries || []).filter(d => d.status === "لم يتم التسليم"),
+    [deliveries]
+  );
+  useFleetAlertNotifications({
+    oilAlerts: oilAlertsForNotify,
+    criticalFuelAlerts: criticalFuelAlertsForNotify,
+    virtualTankAlerts: virtualTankAlertsForNotify,
+    failedDeliveries: failedDeliveriesForNotify,
+    enabled: dataReady && notifPermission === "granted",
+  });
+
+  // عند الضغط على إشعار والتطبيق مفتوح بالفعل، ننتقل مباشرة للتبويب
+  // المقصود بدل فتح الصفحة الرئيسية فقط.
+  React.useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    function handleMessage(event) {
+      const msg = event.data;
+      if (msg && msg.type === "notification_click" && msg.data && msg.data.screen_to_open) {
+        setTab(msg.data.screen_to_open);
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", handleMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
+  }, []);
+
+  // بمجرد منح إذن الإشعارات، نسجّل جهاز المستخدم في Firebase Cloud Messaging
+  // حتى يقدر الخادم الخلفي يرسل له Push حقيقيًا حتى لو التطبيق مغلق.
+  React.useEffect(() => {
+    if (notifPermission === "granted") registerFcmToken(user);
+  }, [notifPermission, user]);
+
+  // رسائل Push اللي توصل والتطبيق مفتوح وموجود في المقدمة (Foreground) لا تظهر
+  // تلقائيًا من المتصفح — لازم نعرضها يدويًا بنفس أسلوب الإشعارات المحلية.
+  React.useEffect(() => {
+    if (!messaging) return;
+    const unsubscribe = messaging.onMessage((payload) => {
+      const n = payload.notification || {};
+      const d = payload.data || {};
+      showFleetNotification(n.title || "", n.body || "", d.entity_id ? `${d.type}-${d.entity_id}` : undefined, d);
+    });
+    return () => { if (typeof unsubscribe === "function") unsubscribe(); };
+  }, []);
 
   const RESTRICTED_KEYS = ["reports", "deliveries", "vehicles", "employees", "customers"];
   const BASE_USER_TABS = TABS.filter(t => !RESTRICTED_KEYS.includes(t.key));
@@ -3768,7 +4031,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                   : tab === "deliveries"
                     ? { deliveries, setDeliveries, isAdmin, lang }
                     : tab === "settings"
-                    ? { currentUser: user, lang, setLang, theme, setTheme }
+                    ? { currentUser: user, lang, setLang, theme, setTheme, notifPermission, requestNotifPermission }
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user, auditLog, lang }
                       : tab === "dash"

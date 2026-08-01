@@ -1,4 +1,44 @@
-const CACHE_NAME = "etronic-fleet-v3";
+// ============================================================
+// Firebase Cloud Messaging — استقبال Push حقيقي والتطبيق مغلق تمامًا
+// ============================================================
+// ملاحظة: نفس firebaseConfig الموجود في index.html. لو حصل أي خطأ هنا
+// (مثلًا SDK متاح لكن Push مش مفعّل)، بنتجاهله بصمت — باقي الـ Service
+// Worker (التخزين المؤقت والتحديثات) يفضل شغّال عادي زي ما هو.
+try {
+  importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
+
+  firebase.initializeApp({
+    apiKey: "AIzaSyCWsNzyrcUREB6xGWOGdF7iUevkUIdd0js",
+    authDomain: "etronic-fleet.firebaseapp.com",
+    projectId: "etronic-fleet",
+    storageBucket: "etronic-fleet.firebasestorage.app",
+    messagingSenderId: "987528911688",
+    appId: "1:987528911688:web:c53fa37e6e3ae4a76df17d",
+  });
+
+  const messaging = firebase.messaging();
+
+  // يُستدعى فقط لما التطبيق يكون مغلق أو في الخلفية تمامًا — الرسائل وقت
+  // فتح التطبيق بيتعامل معاها onMessage جوه index.html مباشرة.
+  messaging.onBackgroundMessage((payload) => {
+    const n = payload.notification || {};
+    const d = payload.data || {};
+    self.registration.showNotification(n.title || "إشعار جديد", {
+      body: n.body || "",
+      icon: "./icon-192.png",
+      badge: "./icon-192.png",
+      dir: "rtl",
+      lang: "ar",
+      data: d,
+      tag: d.entity_id ? `${d.type}-${d.entity_id}` : undefined,
+    });
+  });
+} catch (e) {
+  // فشل صامت — لا نريد كسر باقي الـ Service Worker بسبب مشكلة في FCM
+}
+
+const CACHE_NAME = "etronic-fleet-v4";
 const CORE_ASSETS = [
   "./index.html",
   "./manifest.json",
@@ -60,5 +100,27 @@ self.addEventListener("fetch", (event) => {
         return networkResponse;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+// عند الضغط على إشعار: نركّز على نافذة التطبيق المفتوحة إن وُجدت، أو نفتح
+// واحدة جديدة، ونمرّر بيانات التوجيه (screen_to_open / entity_id) للتطبيق
+// عبر postMessage حتى ينتقل مباشرة للشاشة المناسبة.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientsList) => {
+      for (const client of clientsList) {
+        if ("focus" in client) {
+          client.postMessage({ type: "notification_click", data });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow("./index.html");
+      }
+    })
   );
 });
