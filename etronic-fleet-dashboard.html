@@ -77,6 +77,9 @@ const Plus = makeIcon("➕");
 const Trash2 = makeIcon("🗑️");
 const Calendar = makeIcon("📅");
 const Navigation = makeIcon("🧭");
+const Edit = makeIcon("✏️");
+const CheckCircle = makeIcon("✅");
+const XCircle = makeIcon("❌");
 
 const C = {
   bg: "#12151B", surface: "#1A1F28", surface2: "#212837", border: "#2A313D",
@@ -839,11 +842,38 @@ function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicl
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const [editingId, setEditingId] = useState(null);
+
   function addRecord() {
     if (!form.plate || !form.date || !form.cost) return;
-    setRecords([...records, { id: Date.now(), ...form }]);
+    // قراءة العداد إلزامية عند تسجيل "تغيير الزيت" تحديدًا — بدونها لا يقدر
+    // النظام يحسب متى موعد التغيير القادم، ويفضل يعتبر المركبة "بلا تغيير مسجَّل"
+    // للأبد حتى لو المستخدم فعليًا غيّر الزيت.
+    if (form.type === "تغيير الزيت" && !form.odometer) return;
+    if (editingId !== null) {
+      setRecords(records.map(r => (r.id === editingId ? { ...r, ...form } : r)));
+      setEditingId(null);
+    } else {
+      setRecords([...records, { id: Date.now(), ...form }]);
+    }
     setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
     setPage(1);
+  }
+  function startEdit(record) {
+    setEditingId(record.id);
+    setForm({
+      plate: record.plate || "",
+      date: record.date || "",
+      type: record.type || TYPES[0],
+      cost: record.cost || "",
+      description: record.description || "",
+      nextDue: record.nextDue || "",
+      odometer: record.odometer || "",
+    });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   }
   function removeRecord(id) {
     setRecords(records.filter(r => r.id !== id));
@@ -897,17 +927,28 @@ function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicl
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="number" placeholder="التكلفة" value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder="قراءة العداد عند الصيانة" value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="number" placeholder={form.type === "تغيير الزيت" ? "قراءة العداد عند الصيانة *" : "قراءة العداد عند الصيانة"} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${form.type === "تغيير الزيت" && !form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
           <input type="date" placeholder="الصيانة القادمة" value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="text" placeholder="ملاحظات" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
             className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
-        <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
-          style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> إضافة
-        </button>
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={addRecord} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+            style={{ background: `${C.amber}22`, color: C.amber }}>
+            {editingId !== null ? <><CheckCircle size={14} /> حفظ التعديل</> : <><Plus size={14} /> إضافة</>}
+          </button>
+          {editingId !== null && (
+            <button onClick={cancelEdit} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+              style={{ background: C.surface2, color: C.muted }}>
+              <XCircle size={14} /> إلغاء
+            </button>
+          )}
+        </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+          * قراءة العداد إلزامية عند اختيار "تغيير الزيت" — بدونها لن يقدر النظام يحسب موعد التغيير القادم للمركبة
+        </p>
       </div>
 
       {sorted.length === 0 ? (
@@ -927,6 +968,9 @@ function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicl
                   </p>
                 </div>
                 <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} ج.م</span>
+                <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+                  <Edit size={13} color={C.teal} />
+                </button>
                 <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                   <Trash2 size={13} color={C.red} />
                 </button>

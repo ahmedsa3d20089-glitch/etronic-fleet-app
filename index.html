@@ -1583,6 +1583,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   const OIL_INTERVAL_KM = 2000;
   const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   const [page, setPage] = useState(1);
+  const [editingId, setEditingId] = useState(null);
 
   const totalCost = records.reduce((s, r) => s + Number(r.cost || 0), 0);
   const today = new Date().toISOString().slice(0, 10);
@@ -1598,9 +1599,34 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
 
   function addRecord() {
     if (!form.plate || !form.date || !form.cost) return;
-    setRecords([...records, { id: Date.now(), ...form }]);
+    // قراءة العداد إلزامية عند تسجيل "تغيير الزيت" تحديدًا — بدونها لا يقدر
+    // النظام يحسب متى موعد التغيير القادم، ويفضل يعتبر المركبة "بلا تغيير مسجَّل"
+    // للأبد حتى لو المستخدم فعليًا غيّر الزيت.
+    if (form.type === "تغيير الزيت" && !form.odometer) return;
+    if (editingId !== null) {
+      setRecords(records.map(r => (r.id === editingId ? { ...r, ...form } : r)));
+      setEditingId(null);
+    } else {
+      setRecords([...records, { id: Date.now(), ...form }]);
+    }
     setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
     setPage(1);
+  }
+  function startEdit(record) {
+    setEditingId(record.id);
+    setForm({
+      plate: record.plate || "",
+      date: record.date || "",
+      type: record.type || TYPES[0],
+      cost: record.cost || "",
+      description: record.description || "",
+      nextDue: record.nextDue || "",
+      odometer: record.odometer || "",
+    });
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   }
   function removeRecord(id) {
     if (!confirm(tr("هل أنت متأكد من حذف سجل الصيانة هذا؟", "Are you sure you want to delete this maintenance record?"))) return;
@@ -1659,17 +1685,31 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("قراءة العداد عند الصيانة", "Odometer at service")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          <input type="number" placeholder={form.type === "تغيير الزيت" ? tr("قراءة العداد عند الصيانة *", "Odometer at service *") : tr("قراءة العداد عند الصيانة", "Odometer at service")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
+            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${form.type === "تغيير الزيت" && !form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
           <input type="date" placeholder={tr("الصيانة القادمة", "Next due date")} value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="text" placeholder={tr("ملاحظات", "Notes")} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
             className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
-        <button onClick={addRecord} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
-          style={{ background: `${C.amber}22`, color: C.amber }}>
-          <Plus size={14} /> {tr("إضافة", "Add")}
-        </button>
+        <div className="flex items-center gap-2 mt-3">
+          <button onClick={addRecord} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+            style={{ background: `${C.amber}22`, color: C.amber }}>
+            {editingId !== null ? <><CheckCircle size={14} /> {tr("حفظ التعديل", "Save changes")}</> : <><Plus size={14} /> {tr("إضافة", "Add")}</>}
+          </button>
+          {editingId !== null && (
+            <button onClick={cancelEdit} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
+              style={{ background: C.surface2, color: C.muted }}>
+              <XCircle size={14} /> {tr("إلغاء", "Cancel")}
+            </button>
+          )}
+        </div>
+        <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
+          {tr(
+            "* قراءة العداد إلزامية عند اختيار \"تغيير الزيت\" — بدونها لن يقدر النظام يحسب موعد التغيير القادم للمركبة",
+            "* Odometer reading is required when the type is \"Oil change\" — without it the system can't track the vehicle's next due change"
+          )}
+        </p>
       </div>
 
       {sorted.length === 0 ? (
@@ -1689,6 +1729,9 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
                   </p>
                 </div>
                 <span className="font-mono text-xs shrink-0" style={{ color: C.amber }}>{r.cost} {tr("ج.م", "EGP")}</span>
+                <button onClick={() => startEdit(r)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+                  <Edit size={13} color={C.teal} />
+                </button>
                 {(r.type !== "تغيير الزيت" || isAdmin) && (
                   <button onClick={() => removeRecord(r.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
                     <Trash2 size={13} color={C.red} />
