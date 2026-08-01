@@ -135,8 +135,6 @@ function KpiCard({ icon: Icon, value, label, color }) {
   );
 }
 
-const FRAUD_THRESHOLD_KM_PER_L = 4.5;
-
 function computeConsumptionByPlate(fuelRecords) {
   const byPlate = {};
   fuelRecords.forEach(r => {
@@ -218,9 +216,17 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
 
   const monthlyFuel = useMemo(() => filterCurrentMonth(fuelRecords || []), [fuelRecords]);
   const consumptionByPlate = useMemo(() => computeConsumptionByPlate(monthlyFuel), [monthlyFuel]);
+  // التلوين والتنبيه بقوا معتمدين على انحراف كل سيارة عن متوسطها التاريخي
+  // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط
+  const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
+  const alertByPlate = useMemo(() => {
+    const map = {};
+    fleetAnalytics.forEach(a => { map[a.plate] = a.alertLevel; });
+    return map;
+  }, [fleetAnalytics]);
   const fuelChartData = consumptionByPlate
     .sort((a, b) => b.kmPerLiter - a.kmPerLiter)
-    .map(v => ({ label: v.plate, value: v.kmPerLiter, color: v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L ? C.red : C.teal }));
+    .map(v => ({ label: v.plate, value: v.kmPerLiter, color: alertByPlate[v.plate] === "critical" ? C.red : alertByPlate[v.plate] === "warning" ? C.amber : C.teal }));
 
   const today = new Date().toISOString().slice(0, 10);
   const overdueMaintenance = useMemo(() =>
@@ -241,8 +247,8 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   }, [vehicles, odometerLogs, maintenanceRecords]);
 
   const fuelAnomalyCount = useMemo(() =>
-    consumptionByPlate.filter(v => v.kmPerLiter > 0 && v.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L).length,
-    [consumptionByPlate]);
+    fleetAnalytics.filter(a => a.alertLevel).length,
+    [fleetAnalytics]);
 
   return (
     <div>
@@ -283,7 +289,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
         ) : (
           <>
             <BarChart data={fuelChartData} unit={tr(" كم/لتر", " km/L")} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>{tr(`* الشريط الأحمر معناه المعدل أقل من ${FRAUD_THRESHOLD_KM_PER_L} كم/لتر — ممكن يكون فيه تلاعب في الوقود`, `* A red bar means the rate is below ${FRAUD_THRESHOLD_KM_PER_L} km/L — this could indicate fuel tampering`)}</p>
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.red }}>{tr(`* الشريط الأحمر معناه انحراف ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+ عن متوسط السيارة نفسها، والبرتقالي ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+ — التفاصيل والأسباب المحتملة في تاب "التقارير"`, `* A red bar means ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+ deviation from that vehicle's own average, amber means ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+ — details and possible causes are in the "Reports" tab`)}</p>
           </>
         )}
       </div>
@@ -2408,6 +2414,83 @@ function computeFleetVirtualTanks(vehicles, fuelRecords) {
 // محرك الشرح الذكي — بيقترح أسباب محتملة لكل تنبيه بدل ما يعرض
 // التنبيه لوحده من غير تفسير
 // ============================================================
+// ============================================================
+// إحصائيات تفصيلية لكل سيارة + مقارنة شهر بشهر
+// ============================================================
+function monthKeyOf(dateStr) {
+  return (dateStr || "").slice(0, 7); // YYYY-MM
+}
+
+function computeVehicleStats(plate, fuelRecords, odometerLogs, deliveries) {
+  const analytics = computeVehicleFuelAnalytics(plate, fuelRecords);
+  const fills = (fuelRecords || []).filter(r => r.plate === plate);
+
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0, 7);
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonth = prev.toISOString().slice(0, 7);
+
+  const monthFills = fills.filter(r => monthKeyOf(r.date) === thisMonth);
+  const monthlyFuelUsed = monthFills.reduce((s, r) => s + (Number(r.liters) || 0), 0);
+  const monthlyCost = monthFills.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+  const totalCost = fills.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+
+  // المسافة الشهرية من قراءات العداد (أدق من الاعتماد على التعبئات وحدها)
+  const monthLogs = (odometerLogs || [])
+    .filter(l => l.plate === plate && monthKeyOf(l.date) === thisMonth && l.odometer)
+    .map(l => Number(l.odometer));
+  const monthlyDistance = monthLogs.length > 1 ? Math.max(...monthLogs) - Math.min(...monthLogs) : 0;
+
+  const totalDistance = analytics.rows.reduce((s, r) => s + (r.km > 0 ? r.km : 0), 0);
+  const costPerKm = totalDistance > 0 ? totalCost / totalDistance : 0;
+
+  const deliveryCount = (deliveries || []).filter(d => d.status === "تم التسليم").length;
+  const costPerDelivery = deliveryCount > 0 ? totalCost / deliveryCount : 0;
+
+  // المتوسط اليومي على مدار الشهر الحالي
+  const daysElapsed = now.getDate();
+  const avgDailyDistance = daysElapsed > 0 ? monthlyDistance / daysElapsed : 0;
+  const avgDailyFuel = daysElapsed > 0 ? monthlyFuelUsed / daysElapsed : 0;
+
+  // مقارنة الشهر الحالي بالشهر اللي فاته في معدل الاستهلاك
+  const avgOfMonth = (mk) => {
+    const rows = analytics.rows.filter(r => monthKeyOf(r.date) === mk && r.kmPerLiter > 0);
+    return averageOf(rows.map(r => r.kmPerLiter));
+  };
+  const thisMonthAvg = avgOfMonth(thisMonth);
+  const prevMonthAvg = avgOfMonth(prevMonth);
+  const monthOverMonthPct = prevMonthAvg > 0 ? ((thisMonthAvg - prevMonthAvg) / prevMonthAvg) * 100 : null;
+
+  return {
+    plate,
+    hasData: analytics.hasData,
+    current: analytics.current,
+    average: analytics.avgLast90Days > 0 ? analytics.avgLast90Days : analytics.avgLast10,
+    best: analytics.best,
+    worst: analytics.worst,
+    alertLevel: analytics.alertLevel,
+    deviationPct: analytics.deviationPct,
+    monthlyFuelUsed,
+    monthlyDistance,
+    monthlyCost,
+    totalCost,
+    costPerKm,
+    costPerDelivery,
+    totalRefuels: fills.length,
+    avgDailyDistance,
+    avgDailyFuel,
+    thisMonthAvg,
+    prevMonthAvg,
+    monthOverMonthPct,
+  };
+}
+
+function computeFleetStats(vehicles, fuelRecords, odometerLogs, deliveries) {
+  return (vehicles || [])
+    .map(v => computeVehicleStats(v.plate, fuelRecords, odometerLogs, deliveries))
+    .filter(s => s.hasData);
+}
+
 function explainFuelAlert(analytics, lang) {
   const t = (ar, en) => (lang === "en" ? en : ar);
   const reasons = [];
@@ -2428,7 +2511,7 @@ function explainFuelAlert(analytics, lang) {
   return reasons;
 }
 
-function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
+function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [fuelFrom, setFuelFrom] = useState("");
   const [fuelTo, setFuelTo] = useState("");
@@ -2450,9 +2533,27 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
   const fuelFlags = useMemo(() => computeFuelFlags(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
   const virtualTanks = useMemo(() => computeFleetVirtualTanks(analyticsVehicles, analyticsRecords), [analyticsVehicles, analyticsRecords]);
+  const fleetStats = useMemo(() => computeFleetStats(analyticsVehicles, analyticsRecords, odometerLogs, deliveries), [analyticsVehicles, analyticsRecords, odometerLogs, deliveries]);
+  const bestRanked = useMemo(() => [...fleetStats].filter(s => s.average > 0).sort((a, b) => b.average - a.average), [fleetStats]);
+  const needsReview = useMemo(() => fleetStats.filter(s => s.alertLevel), [fleetStats]);
   const allPlateOptions = useMemo(() =>
     [...new Set(vehicles.map(v => v.plate).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [vehicles]);
+  // خريطة المعدل الطبيعي لكل سيارة، عشان نحكم على كل تعبئة لوحدها
+  // بمقارنتها بمتوسط سيارتها هي — مش برقم ثابت لكل الأسطول
+  const baselineByPlate = useMemo(() => {
+    const map = {};
+    computeFleetFuelAnalytics(vehicles, fuelRecords).forEach(a => {
+      map[a.plate] = a.avgLast90Days > 0 ? a.avgLast90Days : a.avgLast10;
+    });
+    return map;
+  }, [vehicles, fuelRecords]);
+  function isFillSuspicious(r) {
+    const baseline = baselineByPlate[r.plate];
+    if (!baseline || !(r.kmPerLiter > 0)) return false;
+    const dev = ((r.kmPerLiter - baseline) / baseline) * 100;
+    return dev <= -FUEL_ANALYTICS_CONFIG.criticalDeviationPct;
+  }
 
   const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords), [fuelRecords]);
   const plateOptions = useMemo(() =>
@@ -2484,6 +2585,26 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
   const dailyByPlate = useMemo(() => dailyByPlateAll.filter(r =>
     (!kmFrom || r.to >= kmFrom) && (!kmTo || r.from <= kmTo)
   ), [dailyByPlateAll, kmFrom, kmTo]);
+  function exportStatsCsv() {
+    const header = tr("السيارة,الحالي كم/لتر,المتوسط,أفضل,أسوأ,وقود الشهر لتر,مسافة الشهر كم,تكلفة الشهر,إجمالي التكلفة,تكلفة/كم,تكلفة/توصيلة,عدد التعبئات,متوسط يومي كم,متوسط يومي لتر,مقارنة بالشهر السابق %\n", "Vehicle,Current km/L,Average,Best,Worst,Monthly fuel L,Monthly distance km,Monthly cost,Total cost,Cost/km,Cost/delivery,Total refuels,Avg daily km,Avg daily L,Month-over-month %\n");
+    const rows = fleetStats.map(s => csvRow([
+      s.plate, s.current.toFixed(2), s.average.toFixed(2), s.best.toFixed(2), s.worst.toFixed(2),
+      s.monthlyFuelUsed.toFixed(1), s.monthlyDistance.toFixed(0), s.monthlyCost.toFixed(2), s.totalCost.toFixed(2),
+      s.costPerKm.toFixed(2), s.costPerDelivery.toFixed(2), s.totalRefuels,
+      s.avgDailyDistance.toFixed(1), s.avgDailyFuel.toFixed(2),
+      s.monthOverMonthPct === null ? "" : s.monthOverMonthPct.toFixed(1),
+    ])).join("\n");
+    download(tr("تقرير_إحصائيات_السيارات.csv", "vehicle_stats_report.csv"), "\uFEFF" + header + rows);
+  }
+  function exportStatsPdf() {
+    exportTableToPdf(
+      tr("تقرير إحصائيات السيارات التفصيلية", "Detailed vehicle statistics report"),
+      tr(["السيارة", "المتوسط", "وقود الشهر", "مسافة الشهر", "تكلفة الشهر", "تكلفة/كم", "تكلفة/توصيلة", "التعبئات"], ["Vehicle", "Average", "Monthly fuel", "Monthly km", "Monthly cost", "Cost/km", "Cost/delivery", "Refuels"]),
+      fleetStats.map(s => [s.plate, s.average.toFixed(2), s.monthlyFuelUsed.toFixed(1), s.monthlyDistance.toFixed(0), s.monthlyCost.toFixed(0), s.costPerKm.toFixed(2), s.costPerDelivery.toFixed(2), s.totalRefuels]),
+      tr("تقرير_إحصائيات_السيارات.pdf", "vehicle_stats_report.pdf")
+    );
+  }
+
   function exportAnalyticsCsv() {
     const header = tr("السيارة,الحالي كم/لتر,متوسط آخر 10,متوسط 30 يوم,متوسط 90 يوم,أفضل,أسوأ,الانحراف %,الحالة,أسباب محتملة\n", "Vehicle,Current km/L,Avg last 10,Avg 30d,Avg 90d,Best,Worst,Deviation %,Status,Possible causes\n");
     const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
@@ -2602,7 +2723,118 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
         </div>
       </div>
 
-      {fleetAnalytics.length > 0 && (
+      {fleetStats.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: C.teal }}>🏆 {tr("أفضل استهلاك", "Best consumption")}</h4>
+            {bestRanked.slice(0, 5).map((s, i) => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-[11px] w-4" style={{ color: C.muted }}>{i + 1}.</span>
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{s.average.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: C.amber }}>⚠ {tr("أسوأ استهلاك", "Worst consumption")}</h4>
+            {[...bestRanked].reverse().slice(0, 5).map((s, i) => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-[11px] w-4" style={{ color: C.muted }}>{i + 1}.</span>
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{s.average.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: needsReview.length ? `${C.red}0d` : C.surface, border: `1px solid ${needsReview.length ? C.red + "44" : C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: needsReview.length ? C.red : C.muted }}>🔍 {tr("محتاجة مراجعة", "Needs review")}</h4>
+            {needsReview.length === 0 ? (
+              <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("كل السيارات ضمن المعدل الطبيعي ✓", "All vehicles within normal range ✓")}</p>
+            ) : needsReview.slice(0, 5).map(s => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-[11px] font-bold" style={{ color: s.alertLevel === "critical" ? C.red : C.amber }}>
+                  {s.deviationPct > 0 ? "+" : ""}{s.deviationPct.toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fleetStats.length > 0 && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إحصائيات تفصيلية لكل سيارة", "Detailed statistics per vehicle")}</h3>
+            <div className="flex items-center gap-2">
+              <button onClick={exportStatsCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel/CSV</button>
+              <button onClick={exportStatsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+            </div>
+          </div>
+          <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
+            {tr("أرقام الشهر الحالي، والتكلفة، ومقارنة الأداء بالشهر اللي فات", "Current month figures, cost breakdown, and performance vs last month")}
+          </p>
+
+          <div className="hidden md:block overflow-x-auto rounded-xl" style={{ border: `1px solid ${C.border}` }}>
+            <table className="w-full">
+              <thead>
+                <tr style={{ background: C.surface2 }}>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المتوسط", "Average")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("وقود الشهر", "Monthly fuel")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("مسافة الشهر", "Monthly km")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة الشهر", "Monthly cost")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة/كم", "Cost/km")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة/توصيلة", "Cost/delivery")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط يومي", "Daily avg")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التعبئات", "Refuels")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("مقارنة بالشهر السابق", "vs last month")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fleetStats.map(s => (
+                  <tr key={s.plate} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{s.plate}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{s.average.toFixed(2)}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.monthlyFuelUsed.toFixed(1)} {tr("ل", "L")}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.monthlyDistance.toFixed(0)}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.amber }}>{s.monthlyCost.toFixed(0)}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.costPerKm.toFixed(2)}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.costPerDelivery > 0 ? s.costPerDelivery.toFixed(2) : "—"}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.avgDailyDistance.toFixed(0)} {tr("كم", "km")} / {s.avgDailyFuel.toFixed(1)} {tr("ل", "L")}</td>
+                    <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{s.totalRefuels}</td>
+                    <td className="p-2.5 font-mono text-xs font-bold" style={{ color: s.monthOverMonthPct === null ? C.muted : s.monthOverMonthPct >= 0 ? C.teal : C.red }}>
+                      {s.monthOverMonthPct === null ? "—" : `${s.monthOverMonthPct > 0 ? "▲ +" : "▼ "}${s.monthOverMonthPct.toFixed(1)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="md:hidden space-y-2">
+            {fleetStats.map(s => (
+              <div key={s.plate} className="rounded-xl p-3" style={{ background: C.surface2 }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {s.plate}</span>
+                  <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{s.average.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
+                </div>
+                <p className="font-ui text-[11px]" style={{ color: C.muted }}>
+                  {tr("الشهر", "Month")}: {s.monthlyDistance.toFixed(0)} {tr("كم", "km")} · {s.monthlyFuelUsed.toFixed(1)} {tr("لتر", "L")} · {s.monthlyCost.toFixed(0)} {tr("ج.م", "EGP")}
+                </p>
+                <p className="font-ui text-[11px] mt-0.5" style={{ color: C.muted }}>
+                  {tr("تكلفة/كم", "Cost/km")}: {s.costPerKm.toFixed(2)} · {tr("تكلفة/توصيلة", "Cost/delivery")}: {s.costPerDelivery > 0 ? s.costPerDelivery.toFixed(2) : "—"} · {tr("تعبئات", "Refuels")}: {s.totalRefuels}
+                </p>
+                {s.monthOverMonthPct !== null && (
+                  <p className="font-ui text-[11px] mt-0.5 font-bold" style={{ color: s.monthOverMonthPct >= 0 ? C.teal : C.red }}>
+                    {tr("مقارنة بالشهر السابق", "vs last month")}: {s.monthOverMonthPct > 0 ? "▲ +" : "▼ "}{s.monthOverMonthPct.toFixed(1)}%
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
@@ -2809,7 +3041,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
                 </thead>
                 <tbody>
                   {perFill.map((r, i) => {
-                    const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+                    const suspicious = isFillSuspicious(r);
                     return (
                       <tr key={i} style={{ borderTop: `1px solid ${C.border}`, background: suspicious ? `${C.red}0d` : "transparent" }}>
                         <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
@@ -2826,7 +3058,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, lang }) {
             </div>
             <div className="md:hidden space-y-2">
             {perFill.map((r, i) => {
-              const suspicious = r.kmPerLiter > 0 && r.kmPerLiter < FRAUD_THRESHOLD_KM_PER_L;
+              const suspicious = isFillSuspicious(r);
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
@@ -3344,7 +3576,7 @@ function EtronicDashboard({ user, isAdmin, permissions }) {
               : tab === "odometer"
                 ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin, lang }
                 : tab === "reports"
-                  ? { fuelRecords, odometerLogs, vehicles, lang }
+                  ? { fuelRecords, odometerLogs, vehicles, deliveries, lang }
                   : tab === "deliveries"
                     ? { deliveries, setDeliveries, isAdmin, lang }
                     : tab === "settings"
