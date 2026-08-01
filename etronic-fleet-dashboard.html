@@ -162,7 +162,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الأسطول ({vehicles.length} عربية)</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>الأسطول ({vehicles.length} مركبة)</h2>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -763,7 +763,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
           <div className="space-y-2">
             {consumptionByPlate.map(v => (
               <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>مركبة {v.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
               </div>
@@ -784,7 +784,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
                   <Fuel size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>مركبة {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} لتر{r.odometer ? ` · عداد ${r.odometer}` : ""}</p>
                 </div>
                 {r.photo && <img src={r.photo} alt="إيصال" className="w-9 h-9 rounded-lg object-cover shrink-0" />}
@@ -867,11 +867,13 @@ function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicl
           <div className="space-y-2">
             {oilAlerts.map(a => (
               <div key={a.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {a.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>مركبة {a.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
                   {a.lastOilOdometer > 0 ? `آخر تغيير زيت عند ${a.lastOilOdometer} كم` : "لا يوجد تغيير زيت مسجَّل سابقًا"}
                 </span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.red }}>{a.kmSinceOil.toFixed(0)} كيلومترات منذ آخر تغيير</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.red }}>
+                  {a.lastOilOdometer > 0 ? `${a.kmSinceOil.toFixed(0)} كيلومترات منذ آخر تغيير` : "يلزم تسجيل أول عملية تغيير زيت"}
+                </span>
               </div>
             ))}
           </div>
@@ -919,7 +921,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, odometerLogs, vehicl
                   <Wrench size={14} color={C.amber} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {r.plate} · {r.type}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>مركبة {r.plate} · {r.type}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>
                     {r.date}{r.odometer ? ` · عداد ${r.odometer}` : ""}{r.nextDue ? ` · القادمة ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
                   </p>
@@ -1149,7 +1151,7 @@ function OdometerTab({ logs, setLogs, vehicles }) {
                   <Truck size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>عربية {l.plate}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>مركبة {l.plate}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}</p>
                 </div>
                 <span className="font-mono text-xs shrink-0" style={{ color: C.text }}>{l.odometer} كم</span>
@@ -1250,7 +1252,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
           <div className="space-y-2">
             {consumptionByPlate.map(v => (
               <div key={v.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {v.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>مركبة {v.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{v.distance.toFixed(0)} كم · {v.liters.toFixed(0)} لتر</span>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{v.kmPerLiter.toFixed(2)} كم/لتر</span>
               </div>
@@ -1273,7 +1275,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
           <div className="space-y-2">
             {dailyByPlate.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>عربية {r.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>مركبة {r.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.from} → {r.to}</span>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{r.km} كم ({r.avgPerDay.toFixed(0)}/يوم)</span>
               </div>
