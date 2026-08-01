@@ -315,10 +315,10 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
   const comparisonChartData = useMemo(() =>
     fleetAnalytics
+      .map(a => ({ label: a.plate, current: a.current, average: a.avgLast90Days > 0 ? a.avgLast90Days : a.avgLast10, alertLevel: a.alertLevel, deviationPct: a.deviationPct }))
       .filter(a => a.average > 0)
       .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct))
-      .slice(0, 12)
-      .map(a => ({ label: a.plate, current: a.current, average: a.average, alertLevel: a.alertLevel })),
+      .slice(0, 12),
     [fleetAnalytics]);
 
   const today = new Date().toISOString().slice(0, 10);
