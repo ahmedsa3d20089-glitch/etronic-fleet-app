@@ -234,7 +234,7 @@ function FleetChart({ data, unit, legendItems }) {
 }
 
 // شارت مقارنة احترافي (Grouped bars): بيقارن "الحالي" بـ"المتوسط التاريخي"
-// لكل سيارة جنب بعض — نفس محرك التحليل اللي بيغذّي تاب التقارير بالظبط
+// لكل مركبة جنب بعض — نفس محرك التحليل اللي بيغذّي تاب التقارير بالظبط
 // (computeFleetFuelAnalytics)، فأي حاجة تتغيّر في التقارير بتتحدث هنا
 // تلقائيًا من غير ما نكرر أي حساب.
 function FleetComparisonChart({ data, unit, seriesLabels }) {
@@ -309,7 +309,7 @@ function FleetComparisonChart({ data, unit, seriesLabels }) {
 
 function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
-  // التلوين والتنبيه بقوا معتمدين على انحراف كل سيارة عن متوسطها التاريخي
+  // التلوين والتنبيه بقوا معتمدين على انحراف كل مركبة عن متوسطها التاريخي
   // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط، ونفس
   // المحرك اللي بيغذّي الشارت الجديد تحت
   const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
@@ -353,9 +353,9 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
           <span className="font-ui text-sm font-bold" style={{ color: C.red }}>⚠ {tr("تنبيهات:", "Alerts:")}</span>
           {overdueMaintenance > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{overdueMaintenance} {tr("صيانة مجدولة تجاوزت موعدها", "scheduled maintenance jobs are overdue")}</span>}
           {overdueMaintenance > 0 && (oilAlertsCount > 0 || fuelAnomalyCount > 0) && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} {tr("سيارة بحاجة إلى تغيير الزيت", "vehicles need an oil change")}</span>}
+          {oilAlertsCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{oilAlertsCount} {tr("مركبة بحاجة إلى تغيير الزيت", "vehicles need an oil change")}</span>}
           {oilAlertsCount > 0 && fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.muted }}>·</span>}
-          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} {tr("سيارة معدل استهلاكها غير طبيعي هذا الشهر", "vehicles have abnormal consumption this month")}</span>}
+          {fuelAnomalyCount > 0 && <span className="font-ui text-xs" style={{ color: C.text }}>{fuelAnomalyCount} {tr("مركبة معدل استهلاكها غير طبيعي هذا الشهر", "vehicles have abnormal consumption this month")}</span>}
           <span className="font-ui text-[11px]" style={{ color: C.muted }}>{tr('(التفاصيل في تابات "الصيانة" و"الوقود")', '(details in the "Maintenance" and "Fuel" tabs)')}</span>
         </div>
       )}
@@ -363,12 +363,12 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Building2} value={customersCount} label={tr("عدد العملاء في قاعدة البيانات", "Customers in the database")} color={C.teal} />
         <KpiCard icon={Users} value={employeesCount} label={tr("عدد الموظفين", "Number of employees")} color={C.amber} />
-        <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد السيارات النشطة", "Active vehicles")} color={C.teal} />
+        <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد المركبات النشطة", "Active vehicles")} color={C.teal} />
       </div>
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("الحالي مقابل المتوسط التاريخي لكل سيارة (كم/لتر)", "Current vs historical average per vehicle (km/L)")}</h3>
-        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب التقارير — أول 12 سيارة الأكثر انحرافًا عن أدائها المعتاد", "Same deviation analysis as the Reports tab — top 12 vehicles by deviation from their own normal performance")}</p>
+        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("الحالي مقابل المتوسط التاريخي لكل مركبة (كم/لتر)", "Current vs historical average per vehicle (km/L)")}</h3>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب التقارير — أول 12 مركبة الأكثر انحرافًا عن أدائها المعتاد", "Same deviation analysis as the Reports tab — top 12 vehicles by deviation from their own normal performance")}</p>
         {comparisonChartData.length === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("لا توجد بيانات كافية بعد — يجب إدخال قراءة العداد مع كل عملية تعبئة وقود لإظهار التحليل", "Not enough data yet — you need to enter the odometer reading with each fill-up for the analysis to appear")}</p>
         ) : (
@@ -380,7 +380,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
                 { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), color: C.red },
                 { label: tr("المتوسط التاريخي", "Historical average"), color: C.muted },
               ]} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء السيارة نفسها — التفاصيل الكاملة والأسباب المحتملة في تبويب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء المركبة نفسها — التفاصيل الكاملة والأسباب المحتملة في تبويب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
           </>
         )}
       </div>
@@ -407,7 +407,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
     setForm({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
   }
   function removeVehicle(id) {
-    if (!confirm(tr("هل أنت متأكد من حذف هذه السيارة؟", "Are you sure you want to delete this vehicle?"))) return;
+    if (!confirm(tr("هل أنت متأكد من حذف هذه المركبة؟", "Are you sure you want to delete this vehicle?"))) return;
     setVehicles(vehicles.filter(v => v.id !== id));
   }
   function startEdit(v) {
@@ -426,13 +426,13 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الأسطول (${vehicles.length} سيارة)`, `Fleet (${vehicles.length} vehicles)`)}</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الأسطول (${vehicles.length} مركبة)`, `Fleet (${vehicles.length} vehicles)`)}</h2>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة سيارة جديدة", "Add a new vehicle")}</h3>
+          <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة مركبة جديدة", "Add a new vehicle")}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <input placeholder={tr("رقم السيارة", "Plate number")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+            <input placeholder={tr("رقم المركبة", "Plate number")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             <input placeholder={tr("الطراز (اختياري)", "Model (optional)")} value={form.model} onChange={e => setForm({ ...form, model: e.target.value })}
               className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -452,11 +452,11 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
         </div>
       )}
 
-      <SearchBox value={q} onChange={setQ} placeholder={tr("ابحث برقم السيارة...", "Search by plate number...")} />
+      <SearchBox value={q} onChange={setQ} placeholder={tr("ابحث برقم المركبة...", "Search by plate number...")} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {filtered.map(v => editingId === v.id ? (
           <div key={v.id} className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.teal}66` }}>
-            <input placeholder={tr("رقم السيارة", "Plate number")} value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+            <input placeholder={tr("رقم المركبة", "Plate number")} value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
               className="w-full mb-2 rounded-lg px-2 py-1.5 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             <input placeholder={tr("الموديل", "Model")} value={editForm.model} onChange={e => setEditForm({ ...editForm, model: e.target.value })}
               className="w-full mb-2 rounded-lg px-2 py-1.5 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -1297,7 +1297,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
       Number(r.cost) === Number(form.cost)
     );
     if (isDuplicate) {
-      alert(tr("هذه البيانات مسجَّلة مسبقًا — نفس السيارة والتاريخ والعداد واللترات والتكلفة موجودة من قبل", "This entry already exists — same vehicle, date, odometer, liters, and cost were already recorded"));
+      alert(tr("هذه البيانات مسجَّلة مسبقًا — نفس المركبة والتاريخ والعداد واللترات والتكلفة موجودة من قبل", "This entry already exists — same vehicle, date, odometer, liters, and cost were already recorded"));
       return;
     }
     if (form.odometer) {
@@ -1307,7 +1307,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
         const diff = Number(form.odometer) - lastOdo;
         if (diff < 0 || diff > 3000) {
           const ok = confirm(tr(
-            `قراءة العداد هذه (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر عداد مسجَّل لنفس السيارة (${lastOdo} كم). قد يكون هناك خطأ كتابي أو خطأ في قراءة الصورة. هل تريد المتابعة بالحفظ بالرقم نفسه؟`,
+            `قراءة العداد هذه (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر عداد مسجَّل لنفس المركبة (${lastOdo} كم). قد يكون هناك خطأ كتابي أو خطأ في قراءة الصورة. هل تريد المتابعة بالحفظ بالرقم نفسه؟`,
             `This odometer reading (${form.odometer} km) is ${diff < 0 ? "lower than" : "very different from"} the last recorded reading for this vehicle (${lastOdo} km). This could be a typo or a scanning error. Save it anyway?`
           ));
           if (!ok) return;
@@ -1369,7 +1369,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
             {scanNote && <p className="font-ui text-xs mb-3" style={{ color: C.amber }}>{scanNote}</p>}
 
             <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-              <input type="text" placeholder={tr("رقم السيارة", "Vehicle plate")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
+              <input type="text" placeholder={tr("رقم المركبة", "Vehicle plate")} value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
                 list="fuel-vehicle-plates"
                 className="rounded-lg px-2 py-2 font-mono text-xs outline-none"
                 style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -1397,7 +1397,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
             </div>
             {form.plate && (
               <p className="font-ui text-[11px] mt-2" style={{ color: vehicles.some(v => v.plate === form.plate) ? C.teal : C.red }}>
-                {vehicles.some(v => v.plate === form.plate) ? tr(`✓ السيارة: ${form.plate}`, `✓ Vehicle: ${form.plate}`) : tr("⚠ لا توجد سيارة بهذا الرقم في الأسطول", "⚠ No vehicle with this plate in the fleet")}
+                {vehicles.some(v => v.plate === form.plate) ? tr(`✓ المركبة: ${form.plate}`, `✓ Vehicle: ${form.plate}`) : tr("⚠ لا توجد مركبة بهذا الرقم في الأسطول", "⚠ No vehicle with this plate in the fleet")}
               </p>
             )}
             {form.driverCode && (
@@ -1420,7 +1420,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
         <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("سجل عمليات التعبئة", "Fill-up history")}</h3>
         <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("سجل", "records")}</span>
       </div>
-      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("ابحث بالسيارة أو السائق...", "Search by vehicle or driver...")} />
+      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("ابحث بالمركبة أو السائق...", "Search by vehicle or driver...")} />
 
       {filtered.length === 0 ? (
         <EmptyState text={records.length === 0 ? tr("لا توجد عمليات تعبئة مسجَّلة بعد. أضف أول عملية من النموذج أعلاه.", "No fill-ups recorded yet. Add the first one from the form above.") : tr("لا توجد نتائج تطابق البحث.", "No results match your search.")} />
@@ -1431,7 +1431,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
             <table className="w-full">
               <thead>
                 <tr style={{ background: C.surface2 }}>
-                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السائق", "Driver")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر", "Liters")}</th>
@@ -1542,7 +1542,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
                   <Fuel size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {r.plate}{r.driver ? ` · ${r.driver}` : ""}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{r.date} · {r.liters} {tr("لتر", "L")}{r.odometer ? ` · ${tr("عداد", "odometer")} ${r.odometer}` : ""}{r.enteredBy ? ` · ${tr("بواسطة", "by")} ${r.enteredBy}` : ""}</p>
                 </div>
                 {r.photo && <PhotoThumb src={r.photo} alt={tr("إيصال", "receipt")} onView={setViewPhoto} />}
@@ -1623,13 +1623,13 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("الصيانة", "Maintenance")}</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل أعمال الصيانة والإصلاحات لكل سيارة", "Log maintenance and repair work for each vehicle")}</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجل أعمال الصيانة والإصلاحات لكل مركبة", "Log maintenance and repair work for each vehicle")}</p>
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Wrench} value={records.length} label={tr("عدد أعمال الصيانة", "Number of maintenance jobs")} color={C.teal} />
         <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label={tr("إجمالي التكلفة (ج.م)", "Total cost (EGP)")} color={C.red} />
         <KpiCard icon={Calendar} value={upcoming} label={tr("صيانات مجدولة قادمة", "Upcoming scheduled maintenance")} color={C.amber} />
-        <KpiCard icon={Wrench} value={oilAlerts.length} label={tr("سيارات بحاجة إلى تغيير الزيت", "Vehicles needing oil change")} color={oilAlerts.length ? C.red : C.teal} />
+        <KpiCard icon={Wrench} value={oilAlerts.length} label={tr("مركبات بحاجة إلى تغيير الزيت", "Vehicles needing oil change")} color={oilAlerts.length ? C.red : C.teal} />
       </div>
 
       {oilAlerts.length > 0 && (
@@ -1638,7 +1638,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
           <div className="space-y-2">
             {oilAlerts.map(a => (
               <div key={a.plate} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {a.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {a.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
                   {a.lastOilOdometer > 0 ? tr(`آخر تغيير زيت عند ${a.lastOilOdometer} كم`, `Last oil change at ${a.lastOilOdometer} km`) : tr("لا يوجد تغيير زيت مسجَّل سابقًا", "No oil change recorded yet")}
                 </span>
@@ -1657,7 +1657,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("السيارة", "Vehicle")}</option>
+            <option value="">{tr("المركبة", "Vehicle")}</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
@@ -1692,7 +1692,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
                   <Wrench size={14} color={C.amber} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate} · {(TYPE_LABELS[r.type] && TYPE_LABELS[r.type][lang === "en" ? "en" : "ar"]) || r.type}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {r.plate} · {(TYPE_LABELS[r.type] && TYPE_LABELS[r.type][lang === "en" ? "en" : "ar"]) || r.type}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>
                     {r.date}{r.odometer ? ` · ${tr("عداد", "odometer")} ${r.odometer}` : ""}{r.nextDue ? ` · ${tr("القادمة", "next")} ${r.nextDue}` : ""}{r.description ? ` · ${r.description}` : ""}
                   </p>
@@ -2125,7 +2125,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
       String(l.odometer) === String(form.odometer)
     );
     if (isDuplicate) {
-      alert(tr("هذه البيانات مسجَّلة مسبقًا — نفس السيارة والتاريخ وقراءة العداد موجودة من قبل", "This entry already exists — same vehicle, date, and odometer reading were already recorded"));
+      alert(tr("هذه البيانات مسجَّلة مسبقًا — نفس المركبة والتاريخ وقراءة العداد موجودة من قبل", "This entry already exists — same vehicle, date, and odometer reading were already recorded"));
       return;
     }
     const platesLogs = logs.filter(l => l.plate === form.plate);
@@ -2134,7 +2134,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
       const diff = Number(form.odometer) - lastOdo;
       if (diff < 0 || diff > 3000) {
         const ok = confirm(tr(
-          `هذه القراءة (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجَّلة لنفس السيارة (${lastOdo} كم). قد يكون هناك خطأ كتابي أو خطأ في قراءة الصورة. هل تريد المتابعة بالحفظ بالرقم نفسه؟`,
+          `هذه القراءة (${form.odometer} كم) ${diff < 0 ? "أقل من" : "فرق كبير جدًا عن"} آخر قراءة مسجَّلة لنفس المركبة (${lastOdo} كم). قد يكون هناك خطأ كتابي أو خطأ في قراءة الصورة. هل تريد المتابعة بالحفظ بالرقم نفسه؟`,
           `This reading (${form.odometer} km) is ${diff < 0 ? "lower than" : "very different from"} the last recorded reading for this vehicle (${lastOdo} km). This could be a typo or a scanning error. Save it anyway?`
         ));
         if (!ok) return;
@@ -2167,7 +2167,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("قراءة العداد", "Odometer")}</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجّل قراءة عداد كل سيارة بالتاريخ — يُحتسب منها الاستهلاك اليومي في تبويب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجّل قراءة عداد كل مركبة بالتاريخ — يُحتسب منها الاستهلاك اليومي في تبويب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
@@ -2190,7 +2190,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
                 className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-                <option value="">{tr("السيارة", "Vehicle")}</option>
+                <option value="">{tr("المركبة", "Vehicle")}</option>
                 {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
               </select>
               <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
@@ -2210,7 +2210,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
         <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("سجل قراءات العداد", "Odometer reading history")}</h3>
         <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("سجل", "records")}</span>
       </div>
-      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("ابحث بالسيارة...", "Search by vehicle...")} />
+      <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("ابحث بالمركبة...", "Search by vehicle...")} />
 
       {filtered.length === 0 ? (
         <EmptyState text={logs.length === 0 ? tr("لا توجد قراءات مسجَّلة بعد.", "No readings recorded yet.") : tr("لا توجد نتائج تطابق البحث.", "No results match your search.")} />
@@ -2221,7 +2221,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
             <table className="w-full">
               <thead>
                 <tr style={{ background: C.surface2 }}>
-                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("قراءة العداد", "Reading")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("بواسطة", "By")}</th>
@@ -2305,7 +2305,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
                   <Truck size={14} color={C.teal} />
                 </div>
                 <div className="flex-1">
-                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {l.plate}</p>
+                  <p className="font-ui font-semibold text-sm" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {l.plate}</p>
                   <p className="font-ui text-xs" style={{ color: C.muted }}>{l.date}{l.enteredBy ? ` · ${tr("بواسطة", "by")} ${l.enteredBy}` : ""}</p>
                 </div>
                 {l.photo && <PhotoThumb src={l.photo} alt={tr("عداد", "odometer")} onView={setViewPhoto} />}
@@ -2371,7 +2371,7 @@ function averageOf(nums) {
   return valid.reduce((sum, n) => sum + n, 0) / valid.length;
 }
 
-// بيرجع كل إحصائيات سيارة واحدة: الالاستهلاك الحالي، المتوسطات
+// بيرجع كل إحصائيات مركبة واحدة: الالاستهلاك الحالي، المتوسطات
 // المتحركة (آخر 10 عمليات / 30 يوم / 90 يوم)، أفضل وأسوأ قراءة،
 // ونسبة الانحراف عن المتوسط مع تصنيف التنبيه (طبيعي/تحذير/حرج)
 function computeVehicleFuelAnalytics(plate, fuelRecords) {
@@ -2409,7 +2409,7 @@ function computeVehicleFuelAnalytics(plate, fuelRecords) {
   return { plate, rows, hasData: true, current, avgLast10, avgLast30Days, avgLast90Days, best, worst, deviationPct, alertLevel };
 }
 
-// بيرجع تحليل كل السيارات مرة واحدة، مرتب من الأسوأ انحراف للأحسن
+// بيرجع تحليل كل المركبات مرة واحدة، مرتب من الأسوأ انحراف للأحسن
 function computeFleetFuelAnalytics(vehicles, fuelRecords) {
   return vehicles
     .map(v => computeVehicleFuelAnalytics(v.plate, fuelRecords))
@@ -2470,11 +2470,11 @@ function computeFuelFlags(vehicles, fuelRecords) {
 // الفكرة: بدل ما نسأل "هل معدل الالاستهلاك ده طبيعي؟"، بنسأل "هل الكمية
 // اللي اتحطت في التانك دلوقتي منطقية بناءً على اللي المفروض يكون متبقي
 // فيه؟". بنحسب المستوى المتوقع بعد كل رحلة (المستوى السابق ناقص اللي
-// اتصرف على المسافة المقطوعة حسب معدل السيارة التاريخي)، وبنقارنه
+// اتصرف على المسافة المقطوعة حسب معدل المركبة التاريخي)، وبنقارنه
 // بالمساحة الفاضية اللي اتملت فعليًا عند التعبئة الجاية.
 // ده بيكشف حتى السرقة التدريجية البطيئة اللي مبتظهرش في حسابات كم/لتر
 // العادية، لأنها بتبان كفرق متراكم بين المتوقع والفعلي.
-// محتاج سعة التانك تكون متسجلة للسيارة عشان يشتغل.
+// محتاج سعة التانك تكون متسجلة للمركبة عشان يشتغل.
 
 const VIRTUAL_TANK_TOLERANCE_L = 5; // فرق مسموح بيه قبل ما نعتبره مشكلة
 
@@ -2484,7 +2484,7 @@ function computeVirtualTank(plate, vehicles, fuelRecords) {
   if (!capacity) return { plate, hasCapacity: false, entries: [], discrepancies: [] };
 
   const analytics = computeVehicleFuelAnalytics(plate, fuelRecords);
-  // بنستخدم متوسط السيارة التاريخي كأساس لتقدير الصرف على كل كيلومتر
+  // بنستخدم متوسط المركبة التاريخي كأساس لتقدير الصرف على كل كيلومتر
   const baselineKmPerL = analytics.avgLast90Days > 0 ? analytics.avgLast90Days
     : analytics.avgLast10 > 0 ? analytics.avgLast10 : 0;
   if (!baselineKmPerL) return { plate, hasCapacity: true, hasBaseline: false, entries: [], discrepancies: [] };
@@ -2544,7 +2544,7 @@ function computeFleetVirtualTanks(vehicles, fuelRecords) {
 // التنبيه لوحده من غير تفسير
 // ============================================================
 // ============================================================
-// إحصائيات تفصيلية لكل سيارة + مقارنة شهر بشهر
+// إحصائيات تفصيلية لكل مركبة + مقارنة شهر بشهر
 // ============================================================
 function monthKeyOf(dateStr) {
   return (dateStr || "").slice(0, 7); // YYYY-MM
@@ -2670,7 +2670,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   const allPlateOptions = useMemo(() =>
     [...new Set(vehicles.map(v => v.plate).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [vehicles]);
-  // خريطة المعدل الطبيعي لكل سيارة، عشان نحكم على كل تعبئة لوحدها
+  // خريطة المعدل الطبيعي لكل مركبة، عشان نحكم على كل تعبئة لوحدها
   // بمقارنتها بمتوسط سيارتها هي — مش برقم ثابت لكل الأسطول
   const baselineByPlate = useMemo(() => {
     const map = {};
@@ -2721,7 +2721,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     return inDateRange && inKmRange;
   }), [dailyByPlateAll, kmFrom, kmTo, kmMin, kmMax]);
   function exportStatsXlsx() {
-    const headers = tr(["السيارة", "الحالي كم/لتر", "المتوسط", "أفضل", "أسوأ", "وقود الشهر لتر", "مسافة الشهر كم", "تكلفة الشهر", "إجمالي التكلفة", "تكلفة/كم", "تكلفة/توصيلة", "عدد التعبئات", "المتوسط اليومي كم", "المتوسط اليومي لتر", "مقارنة بالشهر السابق %"],
+    const headers = tr(["المركبة", "الحالي كم/لتر", "المتوسط", "أفضل", "أسوأ", "وقود الشهر لتر", "مسافة الشهر كم", "تكلفة الشهر", "إجمالي التكلفة", "تكلفة/كم", "تكلفة/توصيلة", "عدد التعبئات", "المتوسط اليومي كم", "المتوسط اليومي لتر", "مقارنة بالشهر السابق %"],
       ["Vehicle", "Current km/L", "Average", "Best", "Worst", "Monthly fuel L", "Monthly distance km", "Monthly cost", "Total cost", "Cost/km", "Cost/delivery", "Total refuels", "Avg daily km", "Avg daily L", "Month-over-month %"]);
     const rows = fleetStats.map(s => [
       s.plate, round2(s.current), round2(s.average), round2(s.best), round2(s.worst),
@@ -2730,19 +2730,19 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
       round1(s.avgDailyDistance), round2(s.avgDailyFuel),
       s.monthOverMonthPct === null ? "" : round1(s.monthOverMonthPct),
     ]);
-    exportTableToXlsx(tr("إحصائيات السيارات", "Vehicle Statistics"), headers, rows, tr("تقرير_إحصائيات_السيارات.xlsx", "vehicle_stats_report.xlsx"));
+    exportTableToXlsx(tr("إحصائيات المركبات", "Vehicle Statistics"), headers, rows, tr("تقرير_إحصائيات_المركبات.xlsx", "vehicle_stats_report.xlsx"));
   }
   function exportStatsPdf() {
     exportTableToPdf(
-      tr("تقرير إحصائيات السيارات التفصيلية", "Detailed vehicle statistics report"),
-      tr(["السيارة", "المتوسط", "وقود الشهر", "مسافة الشهر", "تكلفة الشهر", "تكلفة/كم", "تكلفة/توصيلة", "التعبئات"], ["Vehicle", "Average", "Monthly fuel", "Monthly km", "Monthly cost", "Cost/km", "Cost/delivery", "Refuels"]),
+      tr("تقرير إحصائيات المركبات التفصيلية", "Detailed vehicle statistics report"),
+      tr(["المركبة", "المتوسط", "وقود الشهر", "مسافة الشهر", "تكلفة الشهر", "تكلفة/كم", "تكلفة/توصيلة", "التعبئات"], ["Vehicle", "Average", "Monthly fuel", "Monthly km", "Monthly cost", "Cost/km", "Cost/delivery", "Refuels"]),
       fleetStats.map(s => [s.plate, s.average.toFixed(2), s.monthlyFuelUsed.toFixed(1), s.monthlyDistance.toFixed(0), s.monthlyCost.toFixed(0), s.costPerKm.toFixed(2), s.costPerDelivery.toFixed(2), s.totalRefuels]),
-      tr("تقرير_إحصائيات_السيارات.pdf", "vehicle_stats_report.pdf")
+      tr("تقرير_إحصائيات_المركبات.pdf", "vehicle_stats_report.pdf")
     );
   }
 
   function exportAnalyticsXlsx() {
-    const headers = tr(["السيارة", "الحالي كم/لتر", "متوسط آخر 10", "متوسط 30 يوم", "متوسط 90 يوم", "أفضل", "أسوأ", "الانحراف %", "الحالة", "أسباب محتملة"],
+    const headers = tr(["المركبة", "الحالي كم/لتر", "متوسط آخر 10", "متوسط 30 يوم", "متوسط 90 يوم", "أفضل", "أسوأ", "الانحراف %", "الحالة", "أسباب محتملة"],
       ["Vehicle", "Current km/L", "Avg last 10", "Avg 30d", "Avg 90d", "Best", "Worst", "Deviation %", "Status", "Possible causes"]);
     const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
     const rows = fleetAnalytics.map(a => [
@@ -2755,13 +2755,13 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     const statusText = (lvl) => lvl === "critical" ? tr("حرج", "Critical") : lvl === "warning" ? tr("تحذير", "Warning") : tr("طبيعي", "Normal");
     exportTableToPdf(
       tr("تقرير المتوسطات المتحركة والانحراف", "Rolling averages & deviation report"),
-      tr(["السيارة", "الحالي", "متوسط 10", "متوسط 30ي", "متوسط 90ي", "أفضل/أسوأ", "الانحراف %", "الحالة"], ["Vehicle", "Current", "Avg 10", "Avg 30d", "Avg 90d", "Best/Worst", "Deviation %", "Status"]),
+      tr(["المركبة", "الحالي", "متوسط 10", "متوسط 30ي", "متوسط 90ي", "أفضل/أسوأ", "الانحراف %", "الحالة"], ["Vehicle", "Current", "Avg 10", "Avg 30d", "Avg 90d", "Best/Worst", "Deviation %", "Status"]),
       fleetAnalytics.map(a => [a.plate, a.current.toFixed(2), a.avgLast10.toFixed(2), a.avgLast30Days.toFixed(2), a.avgLast90Days.toFixed(2), `${a.best.toFixed(1)}/${a.worst.toFixed(1)}`, a.deviationPct.toFixed(1), statusText(a.alertLevel)]),
       tr("تقرير_المتوسطات_والانحراف.pdf", "averages_deviation_report.pdf")
     );
   }
   function exportFlagsXlsx() {
-    const headers = tr(["الخطورة", "السيارة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]);
+    const headers = tr(["الخطورة", "المركبة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]);
     const rows = fuelFlags.map(f => [
       f.severity === "critical" ? tr("حرج", "Critical") : tr("تحذير", "Warning"),
       f.plate, f.date,
@@ -2773,7 +2773,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   function exportFlagsPdf() {
     exportTableToPdf(
       tr("تقرير تنبيهات احتمال التلاعب", "Possible tampering flags report"),
-      tr(["الخطورة", "السيارة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]),
+      tr(["الخطورة", "المركبة", "التاريخ", "نوع التنبيه", "التفاصيل"], ["Severity", "Vehicle", "Date", "Flag type", "Details"]),
       fuelFlags.map(f => [
         f.severity === "critical" ? tr("حرج", "Critical") : tr("تحذير", "Warning"),
         f.plate, f.date,
@@ -2784,7 +2784,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     );
   }
   function exportTankXlsx() {
-    const headers = tr(["السيارة", "سعة الخزان", "المعدل المرجعي", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"],
+    const headers = tr(["المركبة", "سعة الخزان", "المعدل المرجعي", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"],
       ["Vehicle", "Tank capacity", "Baseline km/L", "Date", "Driver", "Added L", "Expected L", "Gap L"]);
     const rows = [];
     virtualTanks.forEach(t => {
@@ -2803,26 +2803,26 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     });
     exportTableToPdf(
       tr("تقرير الخزان الافتراضي — وقود ناقص", "Virtual tank report — missing fuel"),
-      tr(["السيارة", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"], ["Vehicle", "Date", "Driver", "Added L", "Expected L", "Gap L"]),
+      tr(["المركبة", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"], ["Vehicle", "Date", "Driver", "Added L", "Expected L", "Gap L"]),
       rows,
       tr("تقرير_الخزان_الافتراضي.pdf", "virtual_tank_report.pdf")
     );
   }
   function exportPerFillXlsx() {
-    const headers = tr(["السيارة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر"],
+    const headers = tr(["المركبة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر"],
       ["Vehicle", "Driver", "Date", "Previous odometer", "Current odometer", "Km", "Liters", "Km/L"]);
     const rows = perFill.map(r => [r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, round2(r.kmPerLiter)]);
     exportTableToXlsx(tr("كل تعبئة وقود", "Per Fill-up"), headers, rows, tr("تقرير_كل_تعبئة_وقود.xlsx", "per_fillup_report.xlsx"));
   }
   function exportDailyXlsx() {
-    const headers = tr(["السيارة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]);
+    const headers = tr(["المركبة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]);
     const rows = dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, round1(r.avgPerDay)]);
     exportTableToXlsx(tr("الكيلومترات اليومية", "Daily Kilometers"), headers, rows, tr("تقرير_الكيلومترات_اليومية.xlsx", "daily_km_report.xlsx"));
   }
   function exportPerFillPdf() {
     exportTableToPdf(
       tr("تقرير كل تعبئة وقود لوحدها", "Per fill-up fuel report"),
-      tr(["السيارة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L"]),
+      tr(["المركبة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L"]),
       perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
       tr("تقرير_كل_تعبئة_وقود.pdf", "per_fillup_report.pdf")
     );
@@ -2830,7 +2830,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   function exportDailyPdf() {
     exportTableToPdf(
       tr("تقرير الكيلومترات اليومية", "Daily kilometers report"),
-      tr(["السيارة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]),
+      tr(["المركبة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]),
       dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)]),
       tr("تقرير_الكيلومترات_اليومية.pdf", "daily_km_report.pdf")
     );
@@ -2839,7 +2839,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير", "Reports")}</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("تحليل الاستهلاك الوقود وكشف التلاعب والكيلومترات لكل سيارة", "Fuel consumption analysis, tampering detection, and kilometers per vehicle")}</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("تحليل الاستهلاك الوقود وكشف التلاعب والكيلومترات لكل مركبة", "Fuel consumption analysis, tampering detection, and kilometers per vehicle")}</p>
 
       <div className="rounded-2xl p-3 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <p className="font-ui text-xs font-semibold mb-2" style={{ color: C.text }}>{tr("فلترة تقارير التحليل والتلاعب", "Filter analysis & tampering reports")}</p>
@@ -2850,7 +2850,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <select value={anPlate} onChange={e => setAnPlate(e.target.value)}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("كل السيارات", "All vehicles")}</option>
+            <option value="">{tr("كل المركبات", "All vehicles")}</option>
             {allPlateOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {(anFrom || anTo || anPlate) && (
@@ -2887,7 +2887,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
           <div className="rounded-2xl p-4" style={{ background: needsReview.length ? `${C.red}0d` : C.surface, border: `1px solid ${needsReview.length ? C.red + "44" : C.border}` }}>
             <h4 className="font-ui font-bold text-xs mb-2" style={{ color: needsReview.length ? C.red : C.muted }}>🔍 {tr("بحاجة إلى مراجعة", "Needs review")}</h4>
             {needsReview.length === 0 ? (
-              <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("كل السيارات ضمن المعدل الطبيعي ✓", "All vehicles within normal range ✓")}</p>
+              <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("كل المركبات ضمن المعدل الطبيعي ✓", "All vehicles within normal range ✓")}</p>
             ) : needsReview.slice(0, 5).map(s => (
               <div key={s.plate} className="flex items-center gap-2 py-1">
                 <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
@@ -2903,7 +2903,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
       {fleetStats.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إحصائيات تفصيلية لكل سيارة", "Detailed statistics per vehicle")}</h3>
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("إحصائيات تفصيلية لكل مركبة", "Detailed statistics per vehicle")}</h3>
             <div className="flex items-center gap-2">
               <button onClick={exportStatsXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportStatsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
@@ -2917,7 +2917,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             <table className="w-full">
               <thead>
                 <tr style={{ background: C.surface2 }}>
-                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المتوسط", "Average")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("وقود الشهر", "Monthly fuel")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("مسافة الشهر", "Monthly km")}</th>
@@ -2954,7 +2954,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             {fleetStats.map(s => (
               <div key={s.plate} className="rounded-xl p-3" style={{ background: C.surface2 }}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {s.plate}</span>
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {s.plate}</span>
                   <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{s.average.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
                 </div>
                 <p className="font-ui text-[11px]" style={{ color: C.muted }}>
@@ -2983,14 +2983,14 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             </div>
           </div>
           <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
-            {tr("يقارن آخر تعبئة لكل سيارة بمتوسط أدائها الطبيعي (وليس برقم ثابت لكل الأسطول) — وهو أدق في كشف التلاعب", "Compares each vehicle's latest fill-up against its own normal average (not a fixed fleet-wide number) — more accurate for detecting tampering")}
+            {tr("يقارن آخر تعبئة لكل مركبة بمتوسط أدائها الطبيعي (وليس برقم ثابت لكل الأسطول) — وهو أدق في كشف التلاعب", "Compares each vehicle's latest fill-up against its own normal average (not a fixed fleet-wide number) — more accurate for detecting tampering")}
           </p>
 
           <div className="hidden md:block overflow-x-auto rounded-xl" style={{ border: `1px solid ${C.border}` }}>
             <table className="w-full">
               <thead>
                 <tr style={{ background: C.surface2 }}>
-                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                  <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الحالي", "Current")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط آخر 10", "Avg last 10")}</th>
                   <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("متوسط 30 يوم", "Avg 30d")}</th>
@@ -3035,7 +3035,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             {fleetAnalytics.map(a => (
               <div key={a.plate} className="rounded-xl p-3" style={{ background: a.alertLevel === "critical" ? `${C.red}14` : a.alertLevel === "warning" ? `${C.amber}14` : C.surface2 }}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {a.plate}</span>
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {a.plate}</span>
                   {a.alertLevel === "critical" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.red}22`, color: C.red }}>🔴 {tr("حرج", "Critical")}</span>}
                   {a.alertLevel === "warning" && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.amber}22`, color: C.amber }}>⚠ {tr("تحذير", "Warning")}</span>}
                   {!a.alertLevel && <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.teal}22`, color: C.teal }}>✓ {tr("طبيعي", "Normal")}</span>}
@@ -3082,7 +3082,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                 <span className="font-ui text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: f.severity === "critical" ? `${C.red}22` : `${C.amber}22`, color: f.severity === "critical" ? C.red : C.amber }}>
                   {f.severity === "critical" ? `🔴 ${tr("حرج", "Critical")}` : `⚠ ${tr("تحذير", "Warning")}`}
                 </span>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {f.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {f.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
                   {(FUEL_FLAG_LABELS[f.type] && FUEL_FLAG_LABELS[f.type][lang === "en" ? "en" : "ar"]) || f.type} — {f.detail[lang === "en" ? "en" : "ar"]}
                 </span>
@@ -3109,7 +3109,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             {virtualTanks.map(t => (
               <div key={t.plate} className="rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {t.plate}</span>
+                  <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {t.plate}</span>
                   <span className="font-ui text-[11px]" style={{ color: C.muted }}>
                     {tr("سعة الخزان", "Tank")}: {t.capacity} {tr("لتر", "L")} · {tr("المعدل المرجعي", "Baseline")}: {t.baselineKmPerL.toFixed(2)} {tr("كم/لتر", "km/L")}
                   </span>
@@ -3138,7 +3138,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             ))}
           </div>
           <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
-            {tr(`* يُفعَّل هذا فقط للسيارات المسجَّلة لها سعة الخزان من تبويب "الأسطول". يُتجاهَل أي فرق أقل من ${VIRTUAL_TANK_TOLERANCE_L} لتر باعتباره هامشًا طبيعيًا.`, `* Only active for vehicles with a tank capacity set in the "Fleet" tab. Gaps under ${VIRTUAL_TANK_TOLERANCE_L} L are ignored as normal margin.`)}
+            {tr(`* يُفعَّل هذا فقط للمركبات المسجَّلة لها سعة الخزان من تبويب "الأسطول". يُتجاهَل أي فرق أقل من ${VIRTUAL_TANK_TOLERANCE_L} لتر باعتباره هامشًا طبيعيًا.`, `* Only active for vehicles with a tank capacity set in the "Fleet" tab. Gaps under ${VIRTUAL_TANK_TOLERANCE_L} L are ignored as normal margin.`)}
           </p>
         </div>
       )}
@@ -3158,7 +3158,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <select value={fuelPlate} onChange={e => setFuelPlate(e.target.value)}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("كل السيارات", "All vehicles")}</option>
+            <option value="">{tr("كل المركبات", "All vehicles")}</option>
             {plateOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
@@ -3170,7 +3170,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
               <table className="w-full">
                 <thead>
                   <tr style={{ background: C.surface2 }}>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("التاريخ", "Date")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السائق", "Driver")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم", "Km")}</th>
@@ -3200,7 +3200,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
               const suspicious = isFillSuspicious(r);
               return (
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {r.plate}</span>
                   <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} {tr("كم", "km")} · {r.liters} {tr("لتر", "L")}{suspicious ? tr(" · ⚠ احتمال تلاعب", " · ⚠ possible tampering") : ""}</span>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
                 </div>
@@ -3246,7 +3246,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
               <table className="w-full">
                 <thead>
                   <tr style={{ background: C.surface2 }}>
-                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("السيارة", "Vehicle")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("من", "From")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("إلى", "To")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم", "Km")}</th>
@@ -3269,7 +3269,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             <div className="md:hidden space-y-2">
             {dailyByPlate.map((r, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: C.surface2 }}>
-                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {r.plate}</span>
+                <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {r.plate}</span>
                 <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.from} → {r.to}</span>
                 <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.teal }}>{r.km} {tr("كم", "km")} ({r.avgPerDay.toFixed(0)}/{tr("يوم", "day")})</span>
               </div>
@@ -3461,7 +3461,7 @@ function SettingsTab({ currentUser, lang, setLang, theme, setTheme }) {
         <p className="font-ui text-[11px] mt-2" style={{ color: C.muted }}>
           {lang === "en"
             ? "The whole app is translated — pages that use terms from the original database (like maintenance type or vehicle status) keep those exact stored values, only their on-screen label changes with the language."
-            : "التطبيق مترجَم بالكامل — الشاشات التي تستخدم مصطلحات من قاعدة البيانات الأصلية (مثل نوع الصيانة أو حالة السيارة) تحتفظ بالقيمة المخزَّنة نفسها، ويتغيّر شكلها على الشاشة فقط مع تغيير اللغة."}
+            : "التطبيق مترجَم بالكامل — الشاشات التي تستخدم مصطلحات من قاعدة البيانات الأصلية (مثل نوع الصيانة أو حالة المركبة) تحتفظ بالقيمة المخزَّنة نفسها، ويتغيّر شكلها على الشاشة فقط مع تغيير اللغة."}
         </p>
       </div>
 
