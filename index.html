@@ -161,63 +161,6 @@ function KpiCard({ icon: Icon, value, label, color }) {
   );
 }
 
-function computeConsumptionByPlate(fuelRecords) {
-  const byPlate = {};
-  fuelRecords.forEach(r => {
-    if (r.odometer) {
-      if (!byPlate[r.plate]) byPlate[r.plate] = [];
-      byPlate[r.plate].push(r);
-    }
-  });
-  return Object.entries(byPlate).map(([plate, list]) => {
-    const s = [...list].sort((a, b) => Number(a.odometer) - Number(b.odometer));
-    const distance = s.length > 1 ? Number(s[s.length - 1].odometer) - Number(s[0].odometer) : 0;
-    const liters = s.slice(1).reduce((sum, r) => sum + Number(r.liters || 0), 0);
-    const kmPerLiter = liters > 0 ? distance / liters : 0;
-    return { plate, distance, liters, kmPerLiter, fillCount: s.length };
-  }).filter(x => x.distance > 0);
-}
-
-function currentYearMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function filterCurrentMonth(records) {
-  const ym = currentYearMonth();
-  return records.filter(r => (r.date || "").startsWith(ym));
-}
-
-// Km driven per vehicle during the current calendar month, using odometer log readings.
-// Uses the last reading before the month (if any) as the starting point so a single
-// reading taken mid-month still yields a distance, not just readings-within-month deltas.
-function computeMonthlyKmByPlate(odometerLogs) {
-  const ym = currentYearMonth();
-  const byPlate = {};
-  odometerLogs.forEach(l => {
-    if (!byPlate[l.plate]) byPlate[l.plate] = [];
-    byPlate[l.plate].push(l);
-  });
-  const result = [];
-  Object.entries(byPlate).forEach(([plate, list]) => {
-    const sorted = [...list].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-    const inMonth = sorted.filter(l => (l.date || "").startsWith(ym));
-    if (inMonth.length === 0) return;
-    let startOdo;
-    if (inMonth.length >= 2) {
-      startOdo = Number(inMonth[0].odometer);
-    } else {
-      const before = sorted.filter(l => (l.date || "") < `${ym}-01`);
-      if (before.length === 0) return;
-      startOdo = Number(before[before.length - 1].odometer);
-    }
-    const endOdo = Number(inMonth[inMonth.length - 1].odometer);
-    const km = endOdo - startOdo;
-    if (km > 0) result.push({ plate, km });
-  });
-  return result.sort((a, b) => b.km - a.km);
-}
-
 // شارت حديث بديل للنسخة القديمة الثابتة: أعمدة SVG بتتحرك لما الصفحة
 // تفتح (CSS transition)، Tooltip بيظهر عند الوقوف بالماوس/اللمس فوق
 // أي عمود، وLegend تحت. الألوان بتتاخد من نظام الألوان الحالي للتطبيق
@@ -290,24 +233,93 @@ function FleetChart({ data, unit, legendItems }) {
   );
 }
 
+// شارت مقارنة احترافي (Grouped bars): بيقارن "الحالي" بـ"المتوسط التاريخي"
+// لكل سيارة جنب بعض — نفس محرك التحليل اللي بيغذّي تاب التقارير بالظبط
+// (computeFleetFuelAnalytics)، فأي حاجة تتغيّر في التقارير بتتحدث هنا
+// تلقائيًا من غير ما نكرر أي حساب.
+function FleetComparisonChart({ data, unit, seriesLabels }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [grown, setGrown] = useState(false);
+  React.useEffect(() => {
+    setGrown(false);
+    const t = setTimeout(() => setGrown(true), 60);
+    return () => clearTimeout(t);
+  }, [data.map(d => d.label + d.current + d.average).join(",")]);
+
+  const max = Math.max(...data.map(d => Math.max(d.current, d.average)), 1);
+  const groupWidth = 58, barWidth = 20, barGap = 4, groupGap = 20, chartHeight = 150, topPad = 34, bottomPad = 24;
+  const svgWidth = Math.max(data.length * (groupWidth + groupGap) + groupGap, 260);
+
+  const colorFor = (d) => d.alertLevel === "critical" ? C.red : d.alertLevel === "warning" ? C.amber : C.teal;
+
+  return (
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + topPad + bottomPad}`} width="100%" height={chartHeight + topPad + bottomPad} style={{ minWidth: svgWidth, display: "block" }}>
+          {[0, 0.25, 0.5, 0.75, 1].map(f => (
+            <line key={f} x1={0} x2={svgWidth} y1={topPad + chartHeight * (1 - f)} y2={topPad + chartHeight * (1 - f)}
+              stroke={C.border} strokeWidth={1} strokeDasharray="3,3" />
+          ))}
+          {data.map((d, i) => {
+            const gx = groupGap + i * (groupWidth + groupGap);
+            const curH = grown ? Math.max((d.current / max) * chartHeight, 2) : 0;
+            const avgH = grown ? Math.max((d.average / max) * chartHeight, 2) : 0;
+            const isHover = hoverIdx === i;
+            const curColor = colorFor(d);
+            const tipH = 34;
+            const tipY = Math.max(2, topPad + chartHeight - Math.max(curH, avgH) - tipH - 6);
+            return (
+              <g key={d.label}
+                onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
+                onTouchStart={() => setHoverIdx(isHover ? null : i)}
+                style={{ cursor: "pointer" }}>
+                <rect x={gx} y={topPad} width={groupWidth} height={chartHeight} fill="transparent" />
+                <rect x={gx + groupWidth / 2 - barWidth - barGap / 2} y={topPad + chartHeight - curH} width={barWidth} height={curH} rx={4}
+                  fill={curColor} opacity={isHover ? 1 : 0.85}
+                  style={{ transition: "height 0.7s cubic-bezier(.22,1,.36,1), y 0.7s cubic-bezier(.22,1,.36,1), opacity 0.15s" }} />
+                <rect x={gx + groupWidth / 2 + barGap / 2} y={topPad + chartHeight - avgH} width={barWidth} height={avgH} rx={4}
+                  fill={C.muted} opacity={isHover ? 0.9 : 0.45}
+                  style={{ transition: "height 0.7s cubic-bezier(.22,1,.36,1), y 0.7s cubic-bezier(.22,1,.36,1), opacity 0.15s" }} />
+                <text x={gx + groupWidth / 2} y={topPad + chartHeight + 15} textAnchor="middle" fontSize="9" fill={C.muted} fontFamily="monospace">{d.label}</text>
+                {isHover && (
+                  <g>
+                    <rect x={gx} y={tipY} width={groupWidth} height={tipH} rx={5} fill={C.surface} stroke={C.border} strokeWidth={1} />
+                    <text x={gx + groupWidth / 2} y={tipY + 14} textAnchor="middle" fontSize="9" fontWeight="bold" fill={curColor} fontFamily="monospace">{d.current.toFixed(2)}{unit}</text>
+                    <text x={gx + groupWidth / 2} y={tipY + 27} textAnchor="middle" fontSize="9" fill={C.muted} fontFamily="monospace">{d.average.toFixed(2)}{unit}</text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      {seriesLabels && (
+        <div className="flex items-center gap-4 mt-2 flex-wrap justify-center">
+          {seriesLabels.map(l => (
+            <div key={l.label} className="flex items-center gap-1.5">
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: l.color, display: "inline-block" }} />
+              <span className="font-ui text-[10px]" style={{ color: C.muted }}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
-  const monthlyKm = useMemo(() => computeMonthlyKmByPlate(odometerLogs || []), [odometerLogs]);
-  const kmChartData = monthlyKm.map(v => ({ label: v.plate, value: v.km, color: C.amber }));
-
-  const monthlyFuel = useMemo(() => filterCurrentMonth(fuelRecords || []), [fuelRecords]);
-  const consumptionByPlate = useMemo(() => computeConsumptionByPlate(monthlyFuel), [monthlyFuel]);
   // التلوين والتنبيه بقوا معتمدين على انحراف كل سيارة عن متوسطها التاريخي
-  // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط
+  // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط، ونفس
+  // المحرك اللي بيغذّي الشارت الجديد تحت
   const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
-  const alertByPlate = useMemo(() => {
-    const map = {};
-    fleetAnalytics.forEach(a => { map[a.plate] = a.alertLevel; });
-    return map;
-  }, [fleetAnalytics]);
-  const fuelChartData = consumptionByPlate
-    .sort((a, b) => b.kmPerLiter - a.kmPerLiter)
-    .map(v => ({ label: v.plate, value: v.kmPerLiter, color: alertByPlate[v.plate] === "critical" ? C.red : alertByPlate[v.plate] === "warning" ? C.amber : C.teal }));
+  const comparisonChartData = useMemo(() =>
+    fleetAnalytics
+      .filter(a => a.average > 0)
+      .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct))
+      .slice(0, 12)
+      .map(a => ({ label: a.plate, current: a.current, average: a.average, alertLevel: a.alertLevel })),
+    [fleetAnalytics]);
 
   const today = new Date().toISOString().slice(0, 10);
   const overdueMaintenance = useMemo(() =>
@@ -354,28 +366,21 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
         <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد السيارات النشطة", "Active vehicles")} color={C.teal} />
       </div>
 
-      <div className="rounded-2xl p-4 mb-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("كيلومترات كل سيارة على مدار الشهر الحالي", "Kilometers per vehicle this month")}</h3>
-        {kmChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr('مفيش قراءات عداد كفاية في الشهر ده — سجل قراءة عداد كل سيارة من تاب "قراءة العداد"', 'Not enough odometer readings this month — log each vehicle\'s reading from the "Odometer" tab')}</p>
-        ) : (
-          <FleetChart data={kmChartData} unit={tr(" كم", " km")} />
-        )}
-      </div>
-
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("معدل استهلاك الوقود لكل سيارة على مدار الشهر الحالي (كم/لتر)", "Fuel consumption rate per vehicle this month (km/L)")}</h3>
-        {fuelChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية في الشهر ده — لازم تدخل قراءة العداد مع كل تعبئة وقود", "Not enough data this month — you need to enter the odometer reading with each fill-up")}</p>
+        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("الحالي مقابل المتوسط التاريخي لكل سيارة (كم/لتر)", "Current vs historical average per vehicle (km/L)")}</h3>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تاب التقارير — أول 12 سيارة الأكتر انحرافًا عن أدائها المعتاد", "Same deviation analysis as the Reports tab — top 12 vehicles by deviation from their own normal performance")}</p>
+        {comparisonChartData.length === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("مفيش بيانات كفاية لسه — لازم تدخل قراءة العداد مع كل تعبئة وقود عشان يظهر التحليل", "Not enough data yet — you need to enter the odometer reading with each fill-up for the analysis to appear")}</p>
         ) : (
           <>
-            <FleetChart data={fuelChartData} unit={tr(" كم/لتر", " km/L")}
-              legendItems={[
-                { label: tr("طبيعي", "Normal"), color: C.teal },
+            <FleetComparisonChart data={comparisonChartData} unit={tr(" كم/لتر", " km/L")}
+              seriesLabels={[
+                { label: tr("الحالي (طبيعي)", "Current (normal)"), color: C.teal },
                 { label: tr(`تحذير ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`, `Warning ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`), color: C.amber },
                 { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), color: C.red },
+                { label: tr("المتوسط التاريخي", "Historical average"), color: C.muted },
               ]} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("انحراف عن متوسط السيارة نفسها التاريخي — التفاصيل والأسباب المحتملة في تاب \"التقارير\"", "Deviation from that vehicle's own historical average — details and possible causes are in the \"Reports\" tab")}</p>
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء السيارة نفسها — التفاصيل الكاملة والأسباب المحتملة في تاب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
           </>
         )}
       </div>
