@@ -380,7 +380,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
                 { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), color: C.red },
                 { label: tr("المتوسط التاريخي", "Historical average"), color: C.muted },
               ]} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء السيارة نفسها — التفاصيل الكاملة والأسباب المحتملة في تاب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء السيارة نفسها — التفاصيل الكاملة والأسباب المحتملة في تبويب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
           </>
         )}
       </div>
@@ -442,7 +442,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
               <option value="قيد الصيانة">{STATUS_LABELS["قيد الصيانة"][lang === "en" ? "en" : "ar"]}</option>
               <option value="متوقفة">{STATUS_LABELS["متوقفة"][lang === "en" ? "en" : "ar"]}</option>
             </select>
-            <input type="number" placeholder={tr("سعة التانك باللتر (اختياري)", "Tank capacity in liters (optional)")} value={form.tankCapacity} onChange={e => setForm({ ...form, tankCapacity: e.target.value })}
+            <input type="number" placeholder={tr("سعة الخزان باللتر (اختياري)", "Tank capacity in liters (optional)")} value={form.tankCapacity} onChange={e => setForm({ ...form, tankCapacity: e.target.value })}
               className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           </div>
           <button onClick={addVehicle} className="flex items-center gap-1.5 mt-3 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
@@ -466,7 +466,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
               <option value="قيد الصيانة">{STATUS_LABELS["قيد الصيانة"][lang === "en" ? "en" : "ar"]}</option>
               <option value="متوقفة">{STATUS_LABELS["متوقفة"][lang === "en" ? "en" : "ar"]}</option>
             </select>
-            <input type="number" placeholder={tr("سعة التانك (لتر)", "Tank capacity (L)")} value={editForm.tankCapacity} onChange={e => setEditForm({ ...editForm, tankCapacity: e.target.value })}
+            <input type="number" placeholder={tr("سعة الخزان (لتر)", "Tank capacity (L)")} value={editForm.tankCapacity} onChange={e => setEditForm({ ...editForm, tankCapacity: e.target.value })}
               className="w-full mb-2 rounded-lg px-2 py-1.5 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             <div className="flex items-center gap-2">
               <button onClick={saveEdit} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>{tr("حفظ", "Save")}</button>
@@ -874,7 +874,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
                   <button onClick={() => saveLocation(c.uid)} disabled={savingUid === c.uid}
                     className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
                     style={{ background: `${C.teal}22`, color: C.teal }}>
-                    <MapPin size={13} /> {savingUid === c.uid ? tr("يجري تحديد موقعك...", "Getting your location...") : tr("احفظ موقعي الحالي (لازم تكون عند العميل)", "Save my current location (you must be at the customer)")}
+                    <MapPin size={13} /> {savingUid === c.uid ? tr("يجري تحديد موقعك...", "Getting your location...") : tr("احفظ موقعي الحالي (يجب أن تكون عند العميل)", "Save my current location (you must be at the customer)")}
                   </button>
 
                   <div>
@@ -1963,7 +1963,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
           </button>
           <button onClick={clearRoute} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.red}18`, color: C.red }}>
-            <Trash2 size={14} /> {tr("تفريغ الخط", "Clear route")}
+            <Trash2 size={14} /> {tr("إفراغ خط السير", "Clear route")}
           </button>
         </div>
       )}
@@ -2784,7 +2784,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     );
   }
   function exportTankXlsx() {
-    const headers = tr(["السيارة", "سعة التانك", "المعدل المرجعي", "التاريخ", "السائق", "اتحط لتر", "المتوقع لتر", "الفرق لتر"],
+    const headers = tr(["السيارة", "سعة الخزان", "المعدل المرجعي", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"],
       ["Vehicle", "Tank capacity", "Baseline km/L", "Date", "Driver", "Added L", "Expected L", "Gap L"]);
     const rows = [];
     virtualTanks.forEach(t => {
@@ -2792,7 +2792,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
         rows.push([t.plate, t.capacity, round2(t.baselineKmPerL), e.date, e.driver || "", round1(e.litersAdded), round1(e.expectedSpace), round1(e.gap)]);
       });
     });
-    exportTableToXlsx(tr("التانك الافتراضي", "Virtual Tank"), headers, rows, tr("تقرير_التانك_الافتراضي.xlsx", "virtual_tank_report.xlsx"));
+    exportTableToXlsx(tr("الخزان الافتراضي", "Virtual Tank"), headers, rows, tr("تقرير_الخزان_الافتراضي.xlsx", "virtual_tank_report.xlsx"));
   }
   function exportTankPdf() {
     const rows = [];
@@ -2803,9 +2803,9 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     });
     exportTableToPdf(
       tr("تقرير الخزان الافتراضي — وقود ناقص", "Virtual tank report — missing fuel"),
-      tr(["السيارة", "التاريخ", "السائق", "اتحط لتر", "المتوقع لتر", "الفرق لتر"], ["Vehicle", "Date", "Driver", "Added L", "Expected L", "Gap L"]),
+      tr(["السيارة", "التاريخ", "السائق", "الكمية المضافة (لتر)", "المتوقع لتر", "الفرق لتر"], ["Vehicle", "Date", "Driver", "Added L", "Expected L", "Gap L"]),
       rows,
-      tr("تقرير_التانك_الافتراضي.pdf", "virtual_tank_report.pdf")
+      tr("تقرير_الخزان_الافتراضي.pdf", "virtual_tank_report.pdf")
     );
   }
   function exportPerFillXlsx() {
@@ -2885,7 +2885,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             ))}
           </div>
           <div className="rounded-2xl p-4" style={{ background: needsReview.length ? `${C.red}0d` : C.surface, border: `1px solid ${needsReview.length ? C.red + "44" : C.border}` }}>
-            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: needsReview.length ? C.red : C.muted }}>🔍 {tr("محتاجة مراجعة", "Needs review")}</h4>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: needsReview.length ? C.red : C.muted }}>🔍 {tr("بحاجة إلى مراجعة", "Needs review")}</h4>
             {needsReview.length === 0 ? (
               <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("كل السيارات ضمن المعدل الطبيعي ✓", "All vehicles within normal range ✓")}</p>
             ) : needsReview.slice(0, 5).map(s => (
@@ -2910,7 +2910,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
             </div>
           </div>
           <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>
-            {tr("أرقام الشهر الحالي، والتكلفة، ومقارنة الأداء بالشهر اللي فات", "Current month figures, cost breakdown, and performance vs last month")}
+            {tr("أرقام الشهر الحالي، والتكلفة، ومقارنة الأداء بالشهر الماضي", "Current month figures, cost breakdown, and performance vs last month")}
           </p>
 
           <div className="hidden md:block overflow-x-auto rounded-xl" style={{ border: `1px solid ${C.border}` }}>
@@ -2976,7 +2976,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
 
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("متوسطات الالاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("متوسطات الاستهلاك المتحركة والانحراف", "Rolling consumption averages & deviation")}</h3>
             <div className="flex items-center gap-2">
               <button onClick={exportAnalyticsXlsx} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
               <button onClick={exportAnalyticsPdf} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
@@ -3111,7 +3111,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                 <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                   <span className="font-mono text-xs font-bold" style={{ color: C.text }}>{tr("سيارة", "Vehicle")} {t.plate}</span>
                   <span className="font-ui text-[11px]" style={{ color: C.muted }}>
-                    {tr("سعة التانك", "Tank")}: {t.capacity} {tr("لتر", "L")} · {tr("المعدل المرجعي", "Baseline")}: {t.baselineKmPerL.toFixed(2)} {tr("كم/لتر", "km/L")}
+                    {tr("سعة الخزان", "Tank")}: {t.capacity} {tr("لتر", "L")} · {tr("المعدل المرجعي", "Baseline")}: {t.baselineKmPerL.toFixed(2)} {tr("كم/لتر", "km/L")}
                   </span>
                   <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: `${C.red}22`, color: C.red }}>
                     ≈ {t.totalGap.toFixed(1)} {tr("لتر ناقصة", "L missing")}
@@ -3123,7 +3123,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                       <span className="font-ui text-[11px]" style={{ color: C.muted }}>{e.date}</span>
                       {e.driver && <span className="font-ui text-[11px]" style={{ color: C.muted }}>· {e.driver}</span>}
                       <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>
-                        {tr("اتحط", "Added")} {e.litersAdded.toFixed(1)} {tr("لتر", "L")} · {tr("المتوقع", "Expected")} {e.expectedSpace.toFixed(1)} {tr("لتر", "L")}
+                        {tr("الكمية المضافة", "Added")} {e.litersAdded.toFixed(1)} {tr("لتر", "L")} · {tr("المتوقع", "Expected")} {e.expectedSpace.toFixed(1)} {tr("لتر", "L")}
                       </span>
                       <span className="font-mono text-[11px] font-bold" style={{ color: C.red }}>+{e.gap.toFixed(1)} {tr("لتر", "L")}</span>
                     </div>
@@ -3536,7 +3536,7 @@ async function commitOpsChunked(ops) {
   }
 }
 
-// سجل تدقيق بسيط لعمليات الالمسؤول الحساسة (إنشاء/حذف حساب، تفعيل/تعطيل،
+// سجل تدقيق بسيط لعمليات المسؤول الحساسة (إنشاء/حذف حساب، تفعيل/تعطيل،
 // تغيير صلاحيات). كل سطر بيتسجل لوحده كـ document منفصل، من غير ما
 // يعطّل العملية الأساسية لو الكتابة فشلت لأي سبب.
 function logAudit(currentUser, action, details) {

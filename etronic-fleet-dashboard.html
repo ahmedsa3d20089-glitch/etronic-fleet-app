@@ -456,7 +456,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
                   <button onClick={() => saveLocation(c.uid)} disabled={savingUid === c.uid}
                     className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold disabled:opacity-50"
                     style={{ background: `${C.teal}22`, color: C.teal }}>
-                    <MapPin size={13} /> {savingUid === c.uid ? "يجري تحديد موقعك..." : "احفظ موقعي الحالي (لازم تكون عند العميل)"}
+                    <MapPin size={13} /> {savingUid === c.uid ? "يجري تحديد موقعك..." : "احفظ موقعي الحالي (يجب أن تكون عند العميل)"}
                   </button>
 
                   <div>
@@ -700,7 +700,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
     setRecords(records.filter(r => r.id !== id));
   }
   function exportCsv() {
-    const header = "التاريخ,العربية,السائق,لتر,التكلفة,العداد\n";
+    const header = "التاريخ,المركبة,السائق,لتر,التكلفة,العداد\n";
     const rows = sorted.map(r => `${r.date},${r.plate},${r.driver || ""},${r.liters},${r.cost},${r.odometer || ""}`).join("\n");
     download("تقرير_الوقود.csv", "\uFEFF" + header + rows);
   }
@@ -734,7 +734,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none"
             style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
+            <option value="">المركبة</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <input type="text" placeholder="السائق" value={form.driver} onChange={e => setForm({ ...form, driver: e.target.value })}
@@ -757,7 +757,7 @@ function FuelTab({ records, setRecords, vehicles, employees }) {
       {consumptionByPlate.length > 0 && (
         <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>تقرير معدل الالاستهلاك</h3>
+            <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>تقرير معدل الاستهلاك</h3>
             <button onClick={exportCsv} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ تصدير CSV</button>
           </div>
           <div className="space-y-2">
@@ -879,7 +879,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles }) {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
+            <option value="">المركبة</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}
@@ -1112,14 +1112,14 @@ function OdometerTab({ logs, setLogs, vehicles }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>قراءة العداد</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجّل قراءة عداد كل مركبة بالتاريخ — بيتحسب منها الالاستهلاك اليومي في تاب التقارير</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>سجّل قراءة عداد كل مركبة بالتاريخ — يُحتسب منها الاستهلاك اليومي في تبويب التقارير</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>إضافة قراءة</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           <select value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">العربية</option>
+            <option value="">المركبة</option>
             {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
           </select>
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
@@ -1200,19 +1200,19 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   }, [odometerLogs]);
 
   function exportConsumptionCsv() {
-    const header = "العربية,الكيلومترات,اللترات,كم/لتر\n";
+    const header = "المركبة,الكيلومترات,اللترات,كم/لتر\n";
     const rows = consumptionByPlate.map(v => `${v.plate},${v.distance},${v.liters},${v.kmPerLiter.toFixed(2)}`).join("\n");
     download("تقرير_الاستهلاك_الوقود.csv", "\uFEFF" + header + rows);
   }
   function exportDailyCsv() {
-    const header = "العربية,من تاريخ,إلى تاريخ,الكيلومترات المقطوعة,المتوسط اليومي\n";
+    const header = "المركبة,من تاريخ,إلى تاريخ,الكيلومترات المقطوعة,المتوسط اليومي\n";
     const rows = dailyByPlate.map(r => `${r.plate},${r.from},${r.to},${r.km},${r.avgPerDay.toFixed(1)}`).join("\n");
     download("تقرير_الكيلومترات_اليومية.csv", "\uFEFF" + header + rows);
   }
   function exportConsumptionPdf() {
     exportTableToPdf(
       "تقرير معدل الاستهلاك الوقود",
-      ["العربية", "الكيلومترات", "اللترات", "كم/لتر"],
+      ["المركبة", "الكيلومترات", "اللترات", "كم/لتر"],
       consumptionByPlate.map(v => [v.plate, v.distance.toFixed(0), v.liters.toFixed(0), v.kmPerLiter.toFixed(2)]),
       "تقرير_الاستهلاك_الوقود.pdf"
     );
@@ -1220,7 +1220,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
   function exportDailyPdf() {
     exportTableToPdf(
       "تقرير الكيلومترات اليومية",
-      ["العربية", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"],
+      ["المركبة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"],
       dailyByPlate.map(r => [r.plate, r.from, r.to, r.km, r.avgPerDay.toFixed(1)]),
       "تقرير_الكيلومترات_اليومية.pdf"
     );
@@ -1263,7 +1263,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles }) {
           </div>
         </div>
         {dailyByPlate.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>لا توجد بيانات كافية بعد — سجل قراءة العداد بشكل دوري من تاب "قراءة العداد"</p>
+          <p className="font-ui text-xs" style={{ color: C.muted }}>لا توجد بيانات كافية بعد — سجّل قراءة العداد بشكل دوري من تبويب "قراءة العداد"</p>
         ) : (
           <div className="space-y-2">
             {dailyByPlate.map((r, i) => (
