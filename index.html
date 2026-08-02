@@ -38,6 +38,201 @@
 </head>
 <body>
 <div id="root"></div>
+
+<!-- ============================================================ -->
+<!-- SPLASH SCREEN — إضافة فقط، بدون أي تعديل على باقي التطبيق -->
+<!-- ============================================================ -->
+<style>
+  #etronic-splash{
+    position:fixed; inset:0; z-index:9999;
+    background:#12151B;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:opacity .6s ease, filter .6s ease;
+  }
+  #etronic-splash.etronic-splash-hide{ opacity:0; filter:blur(6px); pointer-events:none; }
+
+  .etronic-splash-logo{
+    width:64px; height:64px; border-radius:16px; object-fit:cover;
+    opacity:0; transform:translateY(8px);
+    animation:etronicSplashIn .6s ease forwards .1s;
+  }
+  .etronic-splash-name{
+    margin-top:14px; font-family:'Segoe UI', Tahoma, Arial, sans-serif;
+    font-size:20px; font-weight:700; letter-spacing:.02em; color:#EBF0F5;
+    opacity:0; animation:etronicSplashIn .6s ease forwards .22s;
+  }
+  @keyframes etronicSplashIn{ to{ opacity:1; transform:translateY(0); } }
+
+  .etronic-splash-track{ position:relative; width:min(360px, 78vw); margin-top:38px; height:58px; }
+  .etronic-splash-road{
+    position:absolute; bottom:8px; right:0; left:0; height:2px;
+    background:repeating-linear-gradient(90deg, #223041 0 12px, transparent 12px 24px);
+    animation:etronicRoadMove .6s linear infinite;
+  }
+  @keyframes etronicRoadMove{ to{ background-position-x:36px; } }
+
+  .etronic-splash-truck{ position:absolute; bottom:8px; right:-84px; animation:etronicDrive 2.3s cubic-bezier(.45,.05,.55,.95) infinite; }
+  @keyframes etronicDrive{
+    0%{ right:-84px; }
+    85%{ right:calc(100% + 84px); }
+    100%{ right:calc(100% + 84px); }
+  }
+  .etronic-truck-wheel{ transform-origin:center; animation:etronicSpin .32s linear infinite; }
+  @keyframes etronicSpin{ to{ transform:rotate(-360deg); } }
+  .etronic-truck-body{ animation:etronicBounce .42s ease-in-out infinite; transform-origin:center; }
+  @keyframes etronicBounce{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-1.4px); } }
+  .etronic-truck-streak{ animation:etronicStreak 2.3s cubic-bezier(.45,.05,.55,.95) infinite; }
+  @keyframes etronicStreak{ 0%,15%{ opacity:0; } 20%,80%{ opacity:1; } 100%{ opacity:0; } }
+
+  @media (prefers-reduced-motion: reduce){
+    #etronic-splash *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; }
+  }
+</style>
+
+<div id="etronic-splash">
+  <img class="etronic-splash-logo" src="icon-192.png" alt="Etronic Fleet" />
+  <span class="etronic-splash-name">Etronic Fleet</span>
+  <div class="etronic-splash-track" aria-hidden="true">
+    <div class="etronic-splash-road"></div>
+    <svg class="etronic-splash-truck" width="84" height="46" viewBox="0 0 150 80" fill="none" style="transform:scaleX(-1)">
+      <defs>
+        <linearGradient id="etronicTruckAmber" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#FFCB70"/>
+          <stop offset="45%" stop-color="#F5A524"/>
+          <stop offset="100%" stop-color="#B9720E"/>
+        </linearGradient>
+        <linearGradient id="etronicTruckCab" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#33475C"/>
+          <stop offset="100%" stop-color="#151D26"/>
+        </linearGradient>
+        <linearGradient id="etronicTruckGlass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#BFE3F0"/>
+          <stop offset="55%" stop-color="#6C93A8"/>
+          <stop offset="100%" stop-color="#3C5A6C"/>
+        </linearGradient>
+        <linearGradient id="etronicTruckChrome" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#E7ECF0"/>
+          <stop offset="55%" stop-color="#98A4AF"/>
+          <stop offset="100%" stop-color="#4B5560"/>
+        </linearGradient>
+        <radialGradient id="etronicTruckRim" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#EEF2F5"/>
+          <stop offset="55%" stop-color="#8D97A2"/>
+          <stop offset="100%" stop-color="#333A42"/>
+        </radialGradient>
+        <radialGradient id="etronicTruckHeadlight" cx="45%" cy="40%" r="65%">
+          <stop offset="0%" stop-color="#FFFBEA"/>
+          <stop offset="60%" stop-color="#FFDE8A"/>
+          <stop offset="100%" stop-color="#F5A524"/>
+        </radialGradient>
+        <radialGradient id="etronicTruckShadow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#000000" stop-opacity=".38"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- خطوط حركة خلف الشاحنة -->
+      <g class="etronic-truck-streak">
+        <line x1="-16" y1="24" x2="-3" y2="24" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+        <line x1="-20" y1="36" x2="-4" y2="36" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
+        <line x1="-14" y1="48" x2="-2" y2="48" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".2"/>
+      </g>
+
+      <!-- ظل الأرض -->
+      <ellipse cx="76" cy="72" rx="64" ry="5" fill="url(#etronicTruckShadow)"/>
+
+      <g class="etronic-truck-body">
+        <!-- شاسيه/عمود سفلي -->
+        <rect x="20" y="54" width="108" height="5" rx="1.5" fill="#161C24"/>
+
+        <!-- صندوق الحمولة -->
+        <rect x="6" y="8" width="88" height="46" rx="3" fill="url(#etronicTruckAmber)" stroke="#8A611C" stroke-width="0.6"/>
+        <rect x="6" y="8" width="88" height="9" rx="3" fill="#FFE3A8" opacity=".45"/>
+        <line x1="28" y1="15" x2="28" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
+        <line x1="50" y1="15" x2="50" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
+        <line x1="72" y1="15" x2="72" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
+        <rect x="6" y="46" width="88" height="8" fill="#8A611C" opacity=".3"/>
+        <text x="50" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#1A1206" opacity=".68" letter-spacing="1">ETRONIC</text>
+
+        <!-- المقصورة -->
+        <rect x="94" y="18" width="7" height="36" fill="url(#etronicTruckCab)"/>
+        <path d="M101,18 L118,18 Q123,18 126,23 L131,33 L101,33 Z" fill="url(#etronicTruckGlass)" stroke="#22323F" stroke-width="0.6"/>
+        <line x1="104" y1="20" x2="122" y2="31" stroke="#EAF6FB" stroke-width="1.6" opacity=".5" stroke-linecap="round"/>
+        <rect x="107" y="15" width="10" height="3" rx="1.2" fill="#20262E"/>
+        <rect x="101" y="33" width="30" height="21" fill="url(#etronicTruckCab)" stroke="#0E141A" stroke-width="0.5"/>
+        <line x1="118" y1="33" x2="118" y2="54" stroke="#0E141A" stroke-width="0.6" opacity=".6"/>
+        <rect x="123" y="41" width="4" height="1.6" rx=".8" fill="#8C97A2"/>
+
+        <!-- الموتور والمصد -->
+        <path d="M131,33 L140,37 L146,45 L146,52 L131,52 Z" fill="url(#etronicTruckCab)" stroke="#0E141A" stroke-width="0.5"/>
+        <rect x="141" y="42" width="4" height="8" fill="#12161C"/>
+        <line x1="141.6" y1="43.5" x2="144.4" y2="43.5" stroke="#8C97A2" stroke-width="0.6"/>
+        <line x1="141.6" y1="46" x2="144.4" y2="46" stroke="#8C97A2" stroke-width="0.6"/>
+        <line x1="141.6" y1="48.5" x2="144.4" y2="48.5" stroke="#8C97A2" stroke-width="0.6"/>
+        <rect x="138" y="51" width="11" height="4.5" rx="1.6" fill="url(#etronicTruckChrome)"/>
+        <ellipse cx="145.5" cy="45" rx="3" ry="2.6" fill="url(#etronicTruckHeadlight)" stroke="#C97D0F" stroke-width="0.4"/>
+
+        <!-- عجلة خلفية مزدوجة -->
+        <g class="etronic-truck-wheel" style="transform-origin:34px 62px">
+          <circle cx="30" cy="62" r="10.5" fill="#12161C" stroke="#03050A" stroke-width="1"/>
+          <circle cx="30" cy="62" r="10.5" fill="none" stroke="#1E252D" stroke-width="1.6" stroke-dasharray="2.4 3.4"/>
+          <circle cx="30" cy="62" r="6.2" fill="url(#etronicTruckRim)"/>
+          <circle cx="30" cy="62" r="1.7" fill="#2B323A"/>
+          <line x1="30" y1="56.5" x2="30" y2="67.5" stroke="#4A525C" stroke-width="1"/>
+          <line x1="24.5" y1="62" x2="35.5" y2="62" stroke="#4A525C" stroke-width="1"/>
+          <line x1="26.1" y1="57.6" x2="33.9" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+          <line x1="33.9" y1="57.6" x2="26.1" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+        </g>
+        <g class="etronic-truck-wheel" style="transform-origin:46px 62px">
+          <circle cx="46" cy="62" r="10.5" fill="#12161C" stroke="#03050A" stroke-width="1"/>
+          <circle cx="46" cy="62" r="10.5" fill="none" stroke="#1E252D" stroke-width="1.6" stroke-dasharray="2.4 3.4"/>
+          <circle cx="46" cy="62" r="6.2" fill="url(#etronicTruckRim)"/>
+          <circle cx="46" cy="62" r="1.7" fill="#2B323A"/>
+          <line x1="46" y1="56.5" x2="46" y2="67.5" stroke="#4A525C" stroke-width="1"/>
+          <line x1="40.5" y1="62" x2="51.5" y2="62" stroke="#4A525C" stroke-width="1"/>
+          <line x1="42.1" y1="57.6" x2="49.9" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+          <line x1="49.9" y1="57.6" x2="42.1" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+        </g>
+
+        <!-- عجلة أمامية -->
+        <g class="etronic-truck-wheel" style="transform-origin:120px 62px">
+          <circle cx="120" cy="62" r="10.5" fill="#12161C" stroke="#03050A" stroke-width="1"/>
+          <circle cx="120" cy="62" r="10.5" fill="none" stroke="#1E252D" stroke-width="1.6" stroke-dasharray="2.4 3.4"/>
+          <circle cx="120" cy="62" r="6.2" fill="url(#etronicTruckRim)"/>
+          <circle cx="120" cy="62" r="1.7" fill="#2B323A"/>
+          <line x1="120" y1="56.5" x2="120" y2="67.5" stroke="#4A525C" stroke-width="1"/>
+          <line x1="114.5" y1="62" x2="125.5" y2="62" stroke="#4A525C" stroke-width="1"/>
+          <line x1="116.1" y1="57.6" x2="123.9" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+          <line x1="123.9" y1="57.6" x2="116.1" y2="66.4" stroke="#4A525C" stroke-width="1"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var splash = document.getElementById('etronic-splash');
+    var root = document.getElementById('root');
+    var hidden = false;
+    function hideSplash() {
+      if (hidden) return;
+      hidden = true;
+      splash.classList.add('etronic-splash-hide');
+      setTimeout(function () { splash.remove(); }, 650);
+    }
+    // بيختفي بمجرد ما التطبيق يخلص تحميل ويرسم أول شاشة فعلية، وفيه حد أقصى
+    // للانتظار عشان الشاشة الافتتاحية متفضلش عالقة لو حصل أي تأخير في التحميل
+    var observer = new MutationObserver(function () {
+      if (root.children.length > 0) {
+        observer.disconnect();
+        hideSplash();
+      }
+    });
+    observer.observe(root, { childList: true });
+    setTimeout(hideSplash, 4000);
+  })();
+</script>
 <script type="text/babel" data-presets="react">
 const { useState, useMemo } = React;
 
