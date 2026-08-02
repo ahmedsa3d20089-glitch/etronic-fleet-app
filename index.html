@@ -215,22 +215,39 @@
     var splash = document.getElementById('etronic-splash');
     var root = document.getElementById('root');
     var hidden = false;
+    var appReady = false;
+    var MIN_DISPLAY_MS = 2800; // أقل مدة عرض للشاشة الافتتاحية، حتى لو التطبيق خلص تحميله أسرع من كده
+    var startedAt = Date.now();
+
     function hideSplash() {
       if (hidden) return;
       hidden = true;
       splash.classList.add('etronic-splash-hide');
       setTimeout(function () { splash.remove(); }, 650);
     }
-    // بيختفي بمجرد ما التطبيق يخلص تحميل ويرسم أول شاشة فعلية، وفيه حد أقصى
-    // للانتظار عشان الشاشة الافتتاحية متفضلش عالقة لو حصل أي تأخير في التحميل
+    function tryHide() {
+      if (!appReady) return;
+      var elapsed = Date.now() - startedAt;
+      var remaining = MIN_DISPLAY_MS - elapsed;
+      if (remaining > 0) {
+        setTimeout(hideSplash, remaining);
+      } else {
+        hideSplash();
+      }
+    }
+    // بيختفي بعد ما التطبيق يخلص تحميل ويرسم أول شاشة فعلية، بس مش قبل ما
+    // تعدي مدة العرض الأدنى (MIN_DISPLAY_MS) حتى لو التحميل كان سريع جدًا —
+    // وفيه حد أقصى للانتظار عشان الشاشة الافتتاحية متفضلش عالقة لو حصل أي
+    // تأخير غير متوقع في التحميل
     var observer = new MutationObserver(function () {
       if (root.children.length > 0) {
         observer.disconnect();
-        hideSplash();
+        appReady = true;
+        tryHide();
       }
     });
     observer.observe(root, { childList: true });
-    setTimeout(hideSplash, 4000);
+    setTimeout(function () { appReady = true; tryHide(); }, 5000);
   })();
 </script>
 <script type="text/babel" data-presets="react">
