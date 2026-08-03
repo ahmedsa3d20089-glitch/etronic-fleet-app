@@ -96,10 +96,10 @@
     <div class="etronic-splash-road"></div>
     <svg class="etronic-splash-truck" width="84" height="46" viewBox="0 0 150 80" fill="none" style="transform:scaleX(-1)">
       <defs>
-        <linearGradient id="etronicTruckAmber" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#FFCB70"/>
-          <stop offset="45%" stop-color="#F5A524"/>
-          <stop offset="100%" stop-color="#B9720E"/>
+        <linearGradient id="etronicTruckCyan" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#8FEFE7"/>
+          <stop offset="45%" stop-color="#35C7C0"/>
+          <stop offset="100%" stop-color="#186B65"/>
         </linearGradient>
         <linearGradient id="etronicTruckCab" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#33475C"/>
@@ -133,9 +133,9 @@
 
       <!-- خطوط حركة خلف الشاحنة -->
       <g class="etronic-truck-streak">
-        <line x1="-16" y1="24" x2="-3" y2="24" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
-        <line x1="-20" y1="36" x2="-4" y2="36" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
-        <line x1="-14" y1="48" x2="-2" y2="48" stroke="#F5A524" stroke-width="2.2" stroke-linecap="round" opacity=".2"/>
+        <line x1="-16" y1="24" x2="-3" y2="24" stroke="#35C7C0" stroke-width="2.2" stroke-linecap="round" opacity=".55"/>
+        <line x1="-20" y1="36" x2="-4" y2="36" stroke="#35C7C0" stroke-width="2.2" stroke-linecap="round" opacity=".35"/>
+        <line x1="-14" y1="48" x2="-2" y2="48" stroke="#35C7C0" stroke-width="2.2" stroke-linecap="round" opacity=".2"/>
       </g>
 
       <!-- ظل الأرض -->
@@ -146,13 +146,13 @@
         <rect x="20" y="54" width="108" height="5" rx="1.5" fill="#161C24"/>
 
         <!-- صندوق الحمولة -->
-        <rect x="6" y="8" width="88" height="46" rx="3" fill="url(#etronicTruckAmber)" stroke="#8A611C" stroke-width="0.6"/>
-        <rect x="6" y="8" width="88" height="9" rx="3" fill="#FFE3A8" opacity=".45"/>
-        <line x1="28" y1="15" x2="28" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
-        <line x1="50" y1="15" x2="50" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
-        <line x1="72" y1="15" x2="72" y2="49" stroke="#8A611C" stroke-width="0.7" opacity=".55"/>
-        <rect x="6" y="46" width="88" height="8" fill="#8A611C" opacity=".3"/>
-        <text x="50" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#1A1206" opacity=".68" letter-spacing="1">ETRONIC</text>
+        <rect x="6" y="8" width="88" height="46" rx="3" fill="url(#etronicTruckCyan)" stroke="#186B65" stroke-width="0.6"/>
+        <rect x="6" y="8" width="88" height="9" rx="3" fill="#D3FBF6" opacity=".45"/>
+        <line x1="28" y1="15" x2="28" y2="49" stroke="#186B65" stroke-width="0.7" opacity=".55"/>
+        <line x1="50" y1="15" x2="50" y2="49" stroke="#186B65" stroke-width="0.7" opacity=".55"/>
+        <line x1="72" y1="15" x2="72" y2="49" stroke="#186B65" stroke-width="0.7" opacity=".55"/>
+        <rect x="6" y="46" width="88" height="8" fill="#186B65" opacity=".3"/>
+        <text x="50" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#08211F" opacity=".72" letter-spacing="0.5">E-tronic</text>
 
         <!-- المقصورة -->
         <rect x="94" y="18" width="7" height="36" fill="url(#etronicTruckCab)"/>
@@ -470,7 +470,7 @@ function FleetComparisonChart({ data, unit, seriesLabels }) {
   }, [data.map(d => d.label + d.current + d.average).join(",")]);
 
   const max = Math.max(...data.map(d => Math.max(d.current, d.average)), 1);
-  const groupWidth = 58, barWidth = 20, barGap = 4, groupGap = 20, chartHeight = 150, topPad = 34, bottomPad = 24;
+  const groupWidth = 58, barWidth = 20, barGap = 4, groupGap = 20, chartHeight = 260, topPad = 34, bottomPad = 24;
   const svgWidth = Math.max(data.length * (groupWidth + groupGap) + groupGap, 260);
 
   const colorFor = (d) => d.alertLevel === "critical" ? C.red : d.alertLevel === "warning" ? C.amber : C.teal;
@@ -1796,6 +1796,9 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
+  const [plateFilter, setPlateFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const totalCost = records.reduce((s, r) => s + Number(r.cost || 0), 0);
   const today = new Date().toISOString().slice(0, 10);
@@ -1807,7 +1810,13 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   );
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
-  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const filtered = useMemo(() => sorted.filter(r => {
+    const matchesPlate = !plateFilter || r.plate === plateFilter;
+    const matchesFrom = !dateFrom || (r.date || "") >= dateFrom;
+    const matchesTo = !dateTo || (r.date || "") <= dateTo;
+    return matchesPlate && matchesFrom && matchesTo;
+  }), [sorted, plateFilter, dateFrom, dateTo]);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function addRecord() {
     if (!form.plate || !form.date || !form.cost) return;
@@ -1924,8 +1933,20 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
         </p>
       </div>
 
-      {sorted.length === 0 ? (
-        <EmptyState text={tr("لا توجد أعمال صيانة مسجَّلة بعد. أضف أول عملية من النموذج أعلاه.", "No maintenance jobs recorded yet. Add the first one from the form above.")} />
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <select value={plateFilter} onChange={e => { setPlateFilter(e.target.value); setPage(1); }}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">{tr("كل المركبات", "All vehicles")}</option>
+          {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+        </select>
+        <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} placeholder={tr("من تاريخ", "From")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} placeholder={tr("إلى تاريخ", "To")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState text={records.length === 0 ? tr("لا توجد أعمال صيانة مسجَّلة بعد. أضف أول عملية من النموذج أعلاه.", "No maintenance jobs recorded yet. Add the first one from the form above.") : tr("لا توجد نتائج تطابق الفلتر.", "No results match the filter.")} />
       ) : (
         <>
           <div className="space-y-2">
@@ -1952,7 +1973,7 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
               </div>
             ))}
           </div>
-          <Pager page={page} setPage={setPage} total={sorted.length} />
+          <Pager page={page} setPage={setPage} total={filtered.length} />
         </>
       )}
     </div>
@@ -2333,11 +2354,18 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
   const [editForm, setEditForm] = useState(null);
   const [viewPhoto, setViewPhoto] = useState(null);
   const [listFilter, setListFilter] = useState("");
+  const [plateFilter, setPlateFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
-  const filtered = useMemo(() => sorted.filter(l =>
-    !listFilter || l.plate.toLowerCase().includes(listFilter.toLowerCase())
-  ), [sorted, listFilter]);
+  const filtered = useMemo(() => sorted.filter(l => {
+    const matchesText = !listFilter || l.plate.toLowerCase().includes(listFilter.toLowerCase());
+    const matchesPlate = !plateFilter || l.plate === plateFilter;
+    const matchesFrom = !dateFrom || (l.date || "") >= dateFrom;
+    const matchesTo = !dateTo || (l.date || "") <= dateTo;
+    return matchesText && matchesPlate && matchesFrom && matchesTo;
+  }), [sorted, listFilter, plateFilter, dateFrom, dateTo]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   async function handlePhoto(e) {
@@ -2457,6 +2485,17 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
         <span className="font-ui text-[11px]" style={{ color: C.muted }}>{filtered.length} {tr("سجل", "records")}</span>
       </div>
       <SearchBox value={listFilter} onChange={(v) => { setListFilter(v); setPage(1); }} placeholder={tr("ابحث بالمركبة...", "Search by vehicle...")} />
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <select value={plateFilter} onChange={e => { setPlateFilter(e.target.value); setPage(1); }}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">{tr("كل المركبات", "All vehicles")}</option>
+          {vehicles.map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+        </select>
+        <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} placeholder={tr("من تاريخ", "From")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} placeholder={tr("إلى تاريخ", "To")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState text={logs.length === 0 ? tr("لا توجد قراءات مسجَّلة بعد.", "No readings recorded yet.") : tr("لا توجد نتائج تطابق البحث.", "No results match your search.")} />
