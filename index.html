@@ -587,6 +587,13 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
     const noData = Math.max(0, (vehiclesCount || 0) - fleetAnalytics.length);
     return { critical, warning, normal, noData };
   }, [fleetAnalytics, vehiclesCount]);
+  const rankedByAverage = useMemo(() =>
+    fleetAnalytics
+      .map(a => ({ plate: a.plate, average: a.avgLast90Days > 0 ? a.avgLast90Days : a.avgLast10, alertLevel: a.alertLevel, deviationPct: a.deviationPct }))
+      .filter(a => a.average > 0)
+      .sort((a, b) => b.average - a.average),
+    [fleetAnalytics]);
+  const needsReviewDash = useMemo(() => fleetAnalytics.filter(a => a.alertLevel), [fleetAnalytics]);
 
   const today = new Date().toISOString().slice(0, 10);
   const overdueMaintenance = useMemo(() =>
@@ -645,6 +652,44 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
           </>
         )}
       </div>
+
+      {rankedByAverage.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: C.teal }}>🏆 {tr("أفضل استهلاك", "Best consumption")}</h4>
+            {rankedByAverage.slice(0, 5).map((s, i) => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-[11px] w-4" style={{ color: C.muted }}>{i + 1}.</span>
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-xs font-bold" style={{ color: C.teal }}>{s.average.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: C.amber }}>⚠ {tr("أسوأ استهلاك", "Worst consumption")}</h4>
+            {[...rankedByAverage].reverse().slice(0, 5).map((s, i) => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-[11px] w-4" style={{ color: C.muted }}>{i + 1}.</span>
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-xs font-bold" style={{ color: C.amber }}>{s.average.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: needsReviewDash.length ? `${C.red}0d` : C.surface, border: `1px solid ${needsReviewDash.length ? C.red + "44" : C.border}` }}>
+            <h4 className="font-ui font-bold text-xs mb-2" style={{ color: needsReviewDash.length ? C.red : C.muted }}>🔍 {tr("بحاجة إلى مراجعة", "Needs review")}</h4>
+            {needsReviewDash.length === 0 ? (
+              <p className="font-ui text-[11px]" style={{ color: C.muted }}>{tr("كل المركبات ضمن المعدل الطبيعي ✓", "All vehicles within normal range ✓")}</p>
+            ) : needsReviewDash.slice(0, 5).map(s => (
+              <div key={s.plate} className="flex items-center gap-2 py-1">
+                <span className="font-mono text-xs font-bold flex-1" style={{ color: C.text }}>{s.plate}</span>
+                <span className="font-mono text-[11px] font-bold" style={{ color: s.alertLevel === "critical" ? C.red : C.amber }}>
+                  {s.deviationPct > 0 ? "+" : ""}{s.deviationPct.toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
