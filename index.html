@@ -528,19 +528,65 @@ function FleetComparisonChart({ data, unit, seriesLabels }) {
   );
 }
 
+// دائرة إحصائية (Donut Chart) بسيطة لعرض توزيع المركبات حسب الحالة —
+// كل قطاع نسبة مئوية من الدائرة، مع رقم إجمالي في المنتصف وقائمة تفصيلية تحتها.
+function DonutChart({ segments, centerValue, centerLabel }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  const r = 62, cx = 90, cy = 90, sw = 24;
+  const circumference = 2 * Math.PI * r;
+  let cumulative = 0;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 180 180" width="100%" style={{ maxWidth: 240, display: "block" }}>
+        <g transform={`rotate(-90 ${cx} ${cy})`}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.border} strokeWidth={sw} />
+          {segments.filter(s => s.value > 0).map((s, i) => {
+            const frac = s.value / total;
+            const segLen = frac * circumference;
+            const dashArray = `${segLen} ${circumference - segLen}`;
+            const dashOffset = -cumulative;
+            cumulative += segLen;
+            return (
+              <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={sw}
+                strokeDasharray={dashArray} strokeDashoffset={dashOffset} strokeLinecap="butt"
+                style={{ transition: "stroke-dasharray 0.8s cubic-bezier(.22,1,.36,1)" }} />
+            );
+          })}
+        </g>
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="26" fontWeight="800" fill={C.text} fontFamily="monospace">{centerValue}</text>
+        <text x={cx} y={cy + 16} textAnchor="middle" fontSize="10" fill={C.muted} fontFamily="monospace">{centerLabel}</text>
+      </svg>
+      <div className="w-full mt-3 space-y-1.5">
+        {segments.map((s, i) => (
+          <div key={i} className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color, display: "inline-block", flexShrink: 0 }} />
+              <span className="font-ui text-[11.5px]" style={{ color: C.text }}>{s.label}</span>
+            </div>
+            <span className="font-mono text-[11.5px] font-semibold" style={{ color: C.muted }}>
+              {s.value} <span style={{ opacity: .7 }}>({total ? Math.round((s.value / total) * 100) : 0}%)</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   // التلوين والتنبيه بقوا معتمدين على انحراف كل مركبة عن متوسطها التاريخي
   // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط، ونفس
   // المحرك اللي بيغذّي الشارت الجديد تحت
   const fleetAnalytics = useMemo(() => computeFleetFuelAnalytics(vehicles || [], fuelRecords || []), [vehicles, fuelRecords]);
-  const comparisonChartData = useMemo(() =>
-    fleetAnalytics
-      .map(a => ({ label: a.plate, current: a.current, average: a.avgLast90Days > 0 ? a.avgLast90Days : a.avgLast10, alertLevel: a.alertLevel, deviationPct: a.deviationPct }))
-      .filter(a => a.average > 0)
-      .sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct))
-      .slice(0, 5),
-    [fleetAnalytics]);
+  const statusBreakdown = useMemo(() => {
+    const critical = fleetAnalytics.filter(a => a.alertLevel === "critical").length;
+    const warning = fleetAnalytics.filter(a => a.alertLevel === "warning").length;
+    const normal = fleetAnalytics.filter(a => !a.alertLevel).length;
+    const noData = Math.max(0, (vehiclesCount || 0) - fleetAnalytics.length);
+    return { critical, warning, normal, noData };
+  }, [fleetAnalytics, vehiclesCount]);
 
   const today = new Date().toISOString().slice(0, 10);
   const overdueMaintenance = useMemo(() =>
@@ -579,20 +625,23 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
       </div>
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("الحالي مقابل المتوسط التاريخي لكل مركبة (كم/لتر)", "Current vs historical average per vehicle (km/L)")}</h3>
-        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب التقارير — أول 5 مركبات الأكثر انحرافًا عن أدائها المعتاد", "Same deviation analysis as the Reports tab — top 5 vehicles by deviation from their own normal performance")}</p>
-        {comparisonChartData.length === 0 ? (
-          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("لا توجد بيانات كافية بعد — يجب إدخال قراءة العداد مع كل عملية تعبئة وقود لإظهار التحليل", "Not enough data yet — you need to enter the odometer reading with each fill-up for the analysis to appear")}</p>
+        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("توزيع المركبات حسب حالة استهلاك الوقود", "Vehicle breakdown by fuel-consumption status")}</h3>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب التقارير — كل مركبة مصنَّفة حسب انحرافها عن أدائها المعتاد", "Same deviation analysis as the Reports tab — each vehicle classified by its deviation from its own normal performance")}</p>
+        {vehiclesCount === 0 ? (
+          <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("لا توجد مركبات مسجَّلة بعد", "No vehicles registered yet")}</p>
         ) : (
           <>
-            <FleetComparisonChart data={comparisonChartData} unit={tr(" كم/لتر", " km/L")}
-              seriesLabels={[
-                { label: tr("الحالي (طبيعي)", "Current (normal)"), color: C.teal },
-                { label: tr(`تحذير ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`, `Warning ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`), color: C.amber },
-                { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), color: C.red },
-                { label: tr("المتوسط التاريخي", "Historical average"), color: C.muted },
-              ]} />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("العمود الملوّن = آخر تعبئة، العمود الرمادي = متوسط أداء المركبة نفسها — التفاصيل الكاملة والأسباب المحتملة في تبويب \"التقارير\"", "Colored bar = latest fill-up, gray bar = that vehicle's own average performance — full details and possible causes are in the \"Reports\" tab")}</p>
+            <DonutChart
+              centerValue={vehiclesCount}
+              centerLabel={tr("مركبة", "vehicles")}
+              segments={[
+                { label: tr("طبيعي", "Normal"), value: statusBreakdown.normal, color: C.teal },
+                { label: tr(`تحذير ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`, `Warning ${FUEL_ANALYTICS_CONFIG.warningDeviationPct}%+`), value: statusBreakdown.warning, color: C.amber },
+                { label: tr(`حرج ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`, `Critical ${FUEL_ANALYTICS_CONFIG.criticalDeviationPct}%+`), value: statusBreakdown.critical, color: C.red },
+                { label: tr("بيانات غير كافية", "Not enough data"), value: statusBreakdown.noData, color: C.muted },
+              ]}
+            />
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("التفاصيل الكاملة والأسباب المحتملة لكل مركبة في تبويب \"التقارير\"", "Full details and possible causes for each vehicle are in the \"Reports\" tab")}</p>
           </>
         )}
       </div>
