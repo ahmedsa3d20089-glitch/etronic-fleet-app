@@ -1255,6 +1255,7 @@ function announceSaving() {
   saveStatusListeners.forEach(fn => fn(saveStatusState));
 }
 function announceSaved(err) {
+  if (err) console.error("Etronic Fleet — فشل حفظ في Firestore:", err.code || "", err.message || err);
   saveStatusState = { count: Math.max(0, saveStatusState.count - 1), lastError: err || null };
   saveStatusListeners.forEach(fn => fn(saveStatusState));
 }
@@ -3228,7 +3229,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     const headers = tr(["المركبة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر"],
       ["Vehicle", "Driver", "Date", "Previous odometer", "Current odometer", "Km", "Liters", "Km/L"]);
     const rows = perFill.map(r => [r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, round2(r.kmPerLiter)]);
-    exportTableToXlsx(tr("كل تعبئة وقود", "Per Fill-up"), headers, rows, tr("تقرير_كل_تعبئة_وقود.xlsx", "per_fillup_report.xlsx"));
+    exportTableToXlsx(tr("سجل تعبئة الوقود اليومية", "Daily Fuel Fill-up Log"), headers, rows, tr("سجل_تعبئة_الوقود_اليومية.xlsx", "daily_fuel_fillup_log.xlsx"));
   }
   function exportDailyXlsx() {
     const headers = tr(["المركبة", "من تاريخ", "إلى تاريخ", "الكيلومترات المقطوعة", "المتوسط اليومي"], ["Vehicle", "From", "To", "Km driven", "Daily average"]);
@@ -3237,10 +3238,10 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   }
   function exportPerFillPdf() {
     exportTableToPdf(
-      tr("تقرير كل تعبئة وقود لوحدها", "Per fill-up fuel report"),
+      tr("سجل تعبئة الوقود اليومية", "Daily Fuel Fill-up Log"),
       tr(["المركبة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L"]),
       perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
-      tr("تقرير_كل_تعبئة_وقود.pdf", "per_fillup_report.pdf")
+      tr("سجل_تعبئة_الوقود_اليومية.pdf", "daily_fuel_fillup_log.pdf")
     );
   }
   function exportDailyPdf() {
@@ -3561,7 +3562,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("كل تعبئة وقود لوحدها", "Every fill-up individually")}</h3>
+          <h3 className="font-ui font-bold text-sm" style={{ color: C.text }}>{tr("سجل تعبئة الوقود اليومية", "Daily Fuel Fill-up Log")}</h3>
           <div className="flex items-center gap-2">
             <button onClick={exportPerFillXlsx} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
             <button onClick={exportPerFillPdf} disabled={!perFill.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
