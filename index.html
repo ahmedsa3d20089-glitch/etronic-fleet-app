@@ -15,9 +15,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -1300,7 +1297,31 @@ function SaveIndicator() {
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function round1(n) { return Math.round((Number(n) || 0) * 10) / 10; }
 
+// تحميل كسول (Lazy Load) لمكتبات التصدير الثقيلة — بتتحمّل أول مرة بس حد
+// يستخدم زرار تصدير فعليًا، بدل ما تبطّئ فتح التطبيق من أول ثانية لكل الناس
+// حتى لو محتاجينش التصدير خالص.
+const _loadedScripts = {};
+function loadScriptOnce(src) {
+  if (_loadedScripts[src]) return _loadedScripts[src];
+  _loadedScripts[src] = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => { delete _loadedScripts[src]; reject(new Error("فشل تحميل: " + src)); };
+    document.head.appendChild(script);
+  });
+  return _loadedScripts[src];
+}
+async function ensureExcelJs() {
+  if (!window.ExcelJS) await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js");
+}
+async function ensurePdfLibs() {
+  if (!window.html2canvas) await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  if (!window.jspdf) await loadScriptOnce("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+}
+
 async function exportTableToXlsx(title, headers, rows, filename) {
+  await ensureExcelJs();
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet((title || "Report").slice(0, 31), {
     views: [{ rightToLeft: true }],
@@ -1352,6 +1373,7 @@ async function exportTableToXlsx(title, headers, rows, filename) {
 }
 
 async function exportTableToPdf(title, headers, rows, filename) {
+  await ensurePdfLibs();
   const wrapper = document.createElement("div");
   wrapper.style.position = "fixed";
   wrapper.style.top = "-99999px";
