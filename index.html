@@ -1905,6 +1905,32 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
   }), [sorted, plateFilter, dateFrom, dateTo]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  function exportMaintenanceXlsx() {
+    const headers = tr(
+      ["المركبة", "التاريخ", "النوع", "التكلفة", "قراءة العداد", "الصيانة القادمة", "ملاحظات"],
+      ["Vehicle", "Date", "Type", "Cost", "Odometer", "Next due", "Notes"]
+    );
+    const rows = filtered.map(r => [
+      r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type),
+      r.cost, r.odometer || "", r.nextDue || "", r.description || "",
+    ]);
+    exportTableToXlsx(tr("تقارير الصيانة", "Maintenance Reports"), headers, rows, tr("تقارير_الصيانة.xlsx", "maintenance_reports.xlsx"));
+  }
+  function exportMaintenancePdf() {
+    exportTableToPdf(
+      tr("تقارير الصيانة", "Maintenance Reports"),
+      tr(
+        ["المركبة", "التاريخ", "النوع", "التكلفة", "قراءة العداد", "الصيانة القادمة", "ملاحظات"],
+        ["Vehicle", "Date", "Type", "Cost", "Odometer", "Next due", "Notes"]
+      ),
+      filtered.map(r => [
+        r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type),
+        r.cost, r.odometer || "", r.nextDue || "", r.description || "",
+      ]),
+      tr("تقارير_الصيانة.pdf", "maintenance_reports.pdf")
+    );
+  }
+
   function addRecord() {
     if (!form.plate || !form.date || !form.cost) return;
     // قراءة العداد إلزامية عند تسجيل "تغيير الزيت" تحديدًا — بدونها لا يقدر
@@ -1951,6 +1977,15 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
         <KpiCard icon={TrendingUp} value={totalCost.toFixed(0)} label={tr("إجمالي التكلفة (ج.م)", "Total cost (EGP)")} color={C.red} />
         <KpiCard icon={Calendar} value={upcoming} label={tr("صيانات مجدولة قادمة", "Upcoming scheduled maintenance")} color={C.amber} />
         <KpiCard icon={Wrench} value={oilAlerts.length} label={tr("مركبات بحاجة إلى تغيير الزيت", "Vehicles needing oil change")} color={oilAlerts.length ? C.red : C.teal} />
+      </div>
+
+      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+        <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>📊 {tr("تقارير الصيانة", "Maintenance Reports")}</h3>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("تصدير كل سجلات الصيانة (بعد تطبيق فلاتر المركبة والتاريخ أعلاه إن وُجدت)", "Export all maintenance records (after applying the vehicle/date filters above, if any)")}</p>
+        <div className="flex items-center gap-2">
+          <button onClick={exportMaintenanceXlsx} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
+          <button onClick={exportMaintenancePdf} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+        </div>
       </div>
 
       {oilAlerts.length > 0 && (
@@ -2731,10 +2766,14 @@ function computePerFillConsumption(fuelRecords) {
   Object.entries(byPlate).forEach(([plate, list]) => {
     const s = [...list].sort((a, b) => (a.date || "").localeCompare(b.date || "") || Number(a.odometer) - Number(b.odometer));
     for (let i = 1; i < s.length; i++) {
+      // آلية "تفويلة كاملة إلى تفويلة كاملة": المسافة = عداد التفويلة الحالية - عداد
+      // التفويلة السابقة، والوقود المستهلك = لترات التفويلة الحالية فقط (وليس
+      // السابقة أبدًا)، لأنها هي اللي عوّضت الاستهلاك بين آخر تفويلتين.
       const km = Number(s[i].odometer) - Number(s[i - 1].odometer);
       const liters = Number(s[i].liters || 0);
-      const kmPerLiter = liters > 0 ? km / liters : 0;
-      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter, driver: s[i].driver || "", cost: Number(s[i].cost || 0) });
+      const kmPerLiter = liters > 0 && km > 0 ? km / liters : 0;
+      const literPer100km = km > 0 ? (liters * 100) / km : 0;
+      rows.push({ plate, date: s[i].date, prevOdometer: Number(s[i - 1].odometer), odometer: Number(s[i].odometer), km, liters, kmPerLiter, literPer100km, driver: s[i].driver || "", cost: Number(s[i].cost || 0) });
     }
   });
   return rows.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -3226,9 +3265,9 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
     );
   }
   function exportPerFillXlsx() {
-    const headers = tr(["المركبة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر"],
-      ["Vehicle", "Driver", "Date", "Previous odometer", "Current odometer", "Km", "Liters", "Km/L"]);
-    const rows = perFill.map(r => [r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, round2(r.kmPerLiter)]);
+    const headers = tr(["المركبة", "السائق", "التاريخ", "عداد سابق", "عداد حالي", "الكيلومترات", "اللترات", "كم/لتر", "لتر/100كم"],
+      ["Vehicle", "Driver", "Date", "Previous odometer", "Current odometer", "Km", "Liters", "Km/L", "L/100km"]);
+    const rows = perFill.map(r => [r.plate, r.driver || "", r.date, r.prevOdometer, r.odometer, r.km, r.liters, round2(r.kmPerLiter), round2(r.literPer100km)]);
     exportTableToXlsx(tr("سجل تعبئة الوقود اليومية", "Daily Fuel Fill-up Log"), headers, rows, tr("سجل_تعبئة_الوقود_اليومية.xlsx", "daily_fuel_fillup_log.xlsx"));
   }
   function exportDailyXlsx() {
@@ -3239,8 +3278,8 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   function exportPerFillPdf() {
     exportTableToPdf(
       tr("سجل تعبئة الوقود اليومية", "Daily Fuel Fill-up Log"),
-      tr(["المركبة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L"]),
-      perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2)]),
+      tr(["المركبة", "السائق", "التاريخ", "الكيلومترات", "اللترات", "كم/لتر", "لتر/100كم"], ["Vehicle", "Driver", "Date", "Km", "Liters", "Km/L", "L/100km"]),
+      perFill.map(r => [r.plate, r.driver || "", r.date, r.km, r.liters, r.kmPerLiter.toFixed(2), r.literPer100km.toFixed(2)]),
       tr("سجل_تعبئة_الوقود_اليومية.pdf", "daily_fuel_fillup_log.pdf")
     );
   }
@@ -3593,6 +3632,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم", "Km")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر", "Liters")}</th>
                     <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
+                    <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر/100كم", "L/100km")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3606,6 +3646,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                         <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.km}</td>
                         <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.liters}</td>
                         <td className="p-2.5 font-mono text-xs font-bold" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)}{suspicious ? " ⚠" : ""}</td>
+                        <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.literPer100km.toFixed(2)}</td>
                       </tr>
                     );
                   })}
@@ -3619,7 +3660,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
                 <div key={i} className="flex items-center gap-3 rounded-xl p-2.5" style={{ background: suspicious ? `${C.red}11` : C.surface2, border: suspicious ? `1px solid ${C.red}44` : "none" }}>
                   <span className="font-mono text-xs font-bold shrink-0" style={{ color: C.text }}>{tr("مركبة", "Vehicle")} {r.plate}</span>
                   <span className="font-ui text-[11px] flex-1" style={{ color: C.muted }}>{r.date}{r.driver ? ` · ${r.driver}` : ""} · {r.km} {tr("كم", "km")} · {r.liters} {tr("لتر", "L")}{suspicious ? tr(" · ⚠ احتمال تلاعب", " · ⚠ possible tampering") : ""}</span>
-                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")}</span>
+                  <span className="font-mono text-xs font-bold shrink-0" style={{ color: suspicious ? C.red : C.teal }}>{r.kmPerLiter.toFixed(2)} {tr("كم/لتر", "km/L")} · {r.literPer100km.toFixed(2)} {tr("لتر/100كم", "L/100km")}</span>
                 </div>
               );
             })}
