@@ -2139,7 +2139,7 @@ function twoOptImprove(points) {
   return route;
 }
 
-function RouteTab({ stops, setStops, customerLocations, customers, employees, deliveries, setDeliveries, currentUser, lang }) {
+function RouteTab({ stops, setStops, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
@@ -2148,6 +2148,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
   const [savingPod, setSavingPod] = useState(false);
   const [repCode, setRepCode] = useState("");
   const [repName, setRepName] = useState("");
+  const [tripPlate, setTripPlate] = useState("");
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
@@ -2245,6 +2246,9 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
   function repByCode(code) {
     return (employees || []).find(emp => String(emp.code) === String(code).trim());
   }
+  function vehicleByPlate(plate) {
+    return (vehicles || []).find(v => String(v.plate) === String(plate).trim());
+  }
   function handleRepCodeChange(code) {
     const match = repByCode(code);
     setRepCode(code);
@@ -2264,6 +2268,10 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
       alert(tr("كود المندوب إلزامي — أدخله بجانب زر \"رتب حسب الموقع\" أعلاه قبل تسجيل أي عملية تسليم", "Rep code is required — enter it next to the \"Sort by location\" button above before recording any delivery"));
       return;
     }
+    if (!tripPlate || !vehicleByPlate(tripPlate)) {
+      alert(tr("رقم المركبة إلزامي وصحيح — أدخله بجانب كود المندوب أعلاه قبل تسجيل أي عملية تسليم", "A valid vehicle number is required — enter it next to the rep code above before recording any delivery"));
+      return;
+    }
     setSavingPod(true);
     const record = {
       id: Date.now(),
@@ -2273,6 +2281,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
       status: podForm.status,
       repCode: repCode,
       repName: repName,
+      plate: tripPlate,
       recipientName: podForm.recipientName || "",
       notes: podForm.notes || "",
       photo: podForm.photo || null,
@@ -2310,10 +2319,24 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, de
             {tr("يجب إدخال كود المندوب الصحيح أولًا لاستخدام خط السير", "You must enter a valid rep code first to use the route")}
           </p>
         )}
+        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("رقم المركبة", "Vehicle number")}</h3>
+        <input type="text" placeholder={tr("اكتب رقم المركبة هنا *", "Enter vehicle number here *")}
+          value={tripPlate} onChange={e => setTripPlate(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${!tripPlate ? C.red + "66" : C.border}`, color: C.text }} />
+        {tripPlate ? (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: vehicleByPlate(tripPlate) ? C.teal : C.red }}>
+            {vehicleByPlate(tripPlate) ? tr("✓ مركبة مسجَّلة", "✓ Registered vehicle") : tr("⚠ لا توجد مركبة بهذا الرقم في الأسطول", "⚠ No vehicle with this number in the fleet")}
+          </p>
+        ) : (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: C.red }}>
+            {tr("يجب إدخال رقم مركبة صحيح لاستخدام خط السير", "You must enter a valid vehicle number to use the route")}
+          </p>
+        )}
       </div>
 
-      {!repName ? (
-        <EmptyState text={tr("خط السير مقفل حتى يتم إدخال كود مندوب صحيح أعلاه.", "The route is locked until you enter a valid rep code above.")} />
+      {!repName || !vehicleByPlate(tripPlate) ? (
+        <EmptyState text={tr("خط السير مقفل حتى يتم إدخال كود مندوب صحيح ورقم مركبة صحيح أعلاه.", "The route is locked until you enter a valid rep code and vehicle number above.")} />
       ) : (
         <>
       <div className="flex flex-wrap gap-3 mb-6">
@@ -3999,6 +4022,189 @@ function SettingsTab({ currentUser, lang, setLang, theme, setTheme, notifPermiss
   );
 }
 
+// ============================================================
+// تقارير عامة — تجميع بيانات خط السير + الوقود + الصيانة لكل مركبة
+// في فترة زمنية واحدة، لإعطاء صورة تشغيلية شاملة بدل ما تكون
+// البيانات متفرقة بين تبويبات منفصلة.
+// ============================================================
+function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveries, employees, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
+  const MAINT_TYPE_LABELS = {
+    "صيانة دورية": { ar: "صيانة دورية", en: "Routine maintenance" },
+    "إصلاح عطل": { ar: "إصلاح عطل", en: "Repair" },
+    "تغيير الزيت": { ar: "تغيير الزيت", en: "Oil change" },
+    "إطارات": { ar: "إطارات", en: "Tires" },
+    "أخرى": { ar: "أخرى", en: "Other" },
+  };
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [plateFilter, setPlateFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
+
+  const inRange = (date) => (!dateFrom || (date || "") >= dateFrom) && (!dateTo || (date || "") <= dateTo);
+
+  const filteredDeliveries = useMemo(() =>
+    (deliveries || []).filter(d =>
+      inRange((d.deliveredAt || "").slice(0, 10)) &&
+      (!plateFilter || d.plate === plateFilter) &&
+      (!repFilter || String(d.repCode) === String(repFilter))
+    ),
+    [deliveries, dateFrom, dateTo, plateFilter, repFilter]);
+
+  const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords || []), [fuelRecords]);
+
+  const perVehicle = useMemo(() => {
+    return (vehicles || [])
+      .filter(v => !plateFilter || v.plate === plateFilter)
+      .map(v => {
+        const trips = filteredDeliveries.filter(d => d.plate === v.plate);
+        const fills = perFillAll.filter(r => r.plate === v.plate && inRange(r.date));
+        const maint = (maintenanceRecords || []).filter(r => r.plate === v.plate && inRange(r.date));
+
+        const totalDistance = fills.reduce((s, r) => s + Math.max(0, r.km), 0);
+        const totalLiters = fills.reduce((s, r) => s + r.liters, 0);
+        const fuelCost = fills.reduce((s, r) => s + r.cost, 0);
+        const kmPerLiter = totalLiters > 0 ? totalDistance / totalLiters : 0;
+        const literPer100km = totalDistance > 0 ? (totalLiters * 100) / totalDistance : 0;
+
+        const maintenanceCost = maint.reduce((s, r) => s + Number(r.cost || 0), 0);
+        const maintenanceByType = {};
+        maint.forEach(r => {
+          const label = MAINT_TYPE_LABELS[r.type] ? tr(MAINT_TYPE_LABELS[r.type].ar, MAINT_TYPE_LABELS[r.type].en) : r.type;
+          maintenanceByType[label] = (maintenanceByType[label] || 0) + Number(r.cost || 0);
+        });
+        const maintenanceTypesSummary = Object.entries(maintenanceByType)
+          .map(([type, cost]) => `${type} (${cost.toFixed(0)})`)
+          .join("، ");
+
+        const totalOperationalCost = fuelCost + maintenanceCost;
+        const costPerKm = totalDistance > 0 ? totalOperationalCost / totalDistance : 0;
+
+        return {
+          plate: v.plate,
+          tripsCount: trips.length,
+          totalDistance, totalLiters, kmPerLiter, literPer100km,
+          fuelCost, maintenanceCost, maintenanceTypesSummary,
+          totalOperationalCost, costPerKm,
+        };
+      });
+  }, [vehicles, filteredDeliveries, perFillAll, maintenanceRecords, plateFilter, dateFrom, dateTo]);
+
+  const totals = useMemo(() => perVehicle.reduce((acc, r) => ({
+    trips: acc.trips + r.tripsCount,
+    distance: acc.distance + r.totalDistance,
+    liters: acc.liters + r.totalLiters,
+    fuelCost: acc.fuelCost + r.fuelCost,
+    maintenanceCost: acc.maintenanceCost + r.maintenanceCost,
+    operationalCost: acc.operationalCost + r.totalOperationalCost,
+  }), { trips: 0, distance: 0, liters: 0, fuelCost: 0, maintenanceCost: 0, operationalCost: 0 }), [perVehicle]);
+
+  function exportXlsx() {
+    const headers = tr(
+      ["المركبة", "عدد الرحلات", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة/كم"],
+      ["Vehicle", "Trips", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost/km"]
+    );
+    const rows = perVehicle.map(r => [
+      r.plate, r.tripsCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round2(r.costPerKm),
+    ]);
+    exportTableToXlsx(tr("التقارير العامة", "General Reports"), headers, rows, tr("التقارير_العامة.xlsx", "general_reports.xlsx"));
+  }
+  function exportPdf() {
+    exportTableToPdf(
+      tr("التقارير العامة", "General Reports"),
+      tr(
+        ["المركبة", "الرحلات", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة/كم"],
+        ["Vehicle", "Trips", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/km"]
+      ),
+      perVehicle.map(r => [
+        r.plate, r.tripsCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+        round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round2(r.costPerKm),
+      ]),
+      tr("التقارير_العامة.pdf", "general_reports.pdf")
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير العامة", "General Reports")}</h2>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("تجميع بيانات خط السير والوقود والصيانة لكل مركبة في فترة واحدة", "Route, fuel, and maintenance data aggregated per vehicle for a single period")}</p>
+
+      <div className="flex items-center gap-2 flex-wrap mb-5">
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder={tr("من تاريخ", "From")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder={tr("إلى تاريخ", "To")}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        <select value={plateFilter} onChange={e => setPlateFilter(e.target.value)}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">{tr("كل المركبات", "All vehicles")}</option>
+          {(vehicles || []).map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
+        </select>
+        <select value={repFilter} onChange={e => setRepFilter(e.target.value)}
+          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+          <option value="">{tr("كل المندوبين", "All reps")}</option>
+          {(employees || []).map(e => <option key={e.code} value={e.code}>{e.name} ({e.code})</option>)}
+        </select>
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-6">
+        <KpiCard icon={Navigation} value={totals.trips} label={tr("إجمالي عدد الرحلات", "Total trips")} color={C.teal} />
+        <KpiCard icon={TrendingUp} value={round1(totals.distance)} label={tr("إجمالي الكيلومترات", "Total kilometers")} color={C.teal} />
+        <KpiCard icon={Fuel} value={round1(totals.liters)} label={tr("إجمالي الوقود المستهلك (لتر)", "Total fuel consumed (L)")} color={C.amber} />
+        <KpiCard icon={Fuel} value={round1(totals.fuelCost)} label={tr("إجمالي تكلفة الوقود", "Total fuel cost")} color={C.amber} />
+        <KpiCard icon={Wrench} value={round1(totals.maintenanceCost)} label={tr("إجمالي تكلفة الصيانة", "Total maintenance cost")} color={C.red} />
+        <KpiCard icon={TrendingUp} value={round1(totals.operationalCost)} label={tr("التكلفة الإجمالية", "Total operational cost")} color={C.red} />
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={exportXlsx} disabled={!perVehicle.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.teal}22`, color: C.teal }}>⬇ Excel (.xlsx)</button>
+        <button onClick={exportPdf} disabled={!perVehicle.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
+      </div>
+
+      {perVehicle.length === 0 ? (
+        <EmptyState text={tr("لا توجد مركبات مسجَّلة بعد", "No vehicles registered yet")} />
+      ) : (
+        <div className="overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
+          <table className="w-full text-right" style={{ minWidth: 900 }}>
+            <thead>
+              <tr style={{ background: C.surface2 }}>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الرحلات", "Trips")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المسافة (كم)", "Distance (km)")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("اللترات", "Liters")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لتر/100كم", "L/100km")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة الوقود", "Fuel cost")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة الصيانة", "Maint. cost")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("أنواع الصيانة", "Maint. types")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("إجمالي التشغيل", "Total cost")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة/كم", "Cost/km")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {perVehicle.map(r => (
+                <tr key={r.plate} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.tripsCount}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalDistance)}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalLiters)}</td>
+                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{r.kmPerLiter ? round2(r.kmPerLiter) : "—"}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.literPer100km ? round2(r.literPer100km) : "—"}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.amber }}>{round1(r.fuelCost)}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.red }}>{round1(r.maintenanceCost)}</td>
+                  <td className="p-2.5 font-ui text-[11px]" style={{ color: C.muted }}>{r.maintenanceTypesSummary || "—"}</td>
+                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{round1(r.totalOperationalCost)}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.costPerKm ? round2(r.costPerKm) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
   { key: "dash", label: "الرئيسية", icon: LayoutDashboard, comp: DashboardTab },
   { key: "route", label: "خط السير", icon: Navigation, comp: RouteTab },
@@ -4007,6 +4213,7 @@ const TABS = [
   { key: "odometer", label: "قراءة العداد", icon: TrendingUp, comp: OdometerTab },
   { key: "reports", label: "التقارير", icon: Building2, comp: ReportsTab },
   { key: "deliveries", label: "تقارير التسليمات", icon: Package, comp: DeliveryReportsTab },
+  { key: "generalReports", label: "التقارير العامة", icon: TrendingUp, comp: GeneralReportsTab },
   { key: "vehicles", label: "الأسطول", icon: Truck, comp: VehiclesTab },
   { key: "employees", label: "الموظفون", icon: Users, comp: EmployeesTab },
   { key: "customers", label: "العملاء", icon: Building2, comp: CustomersTab },
@@ -4452,7 +4659,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
     return () => { if (typeof unsubscribe === "function") unsubscribe(); };
   }, []);
 
-  const RESTRICTED_KEYS = ["reports", "deliveries", "vehicles", "employees", "customers"];
+  const RESTRICTED_KEYS = ["reports", "deliveries", "generalReports", "vehicles", "employees", "customers"];
   const BASE_USER_TABS = TABS.filter(t => !RESTRICTED_KEYS.includes(t.key));
   const grantedTabs = TABS.filter(t => RESTRICTED_KEYS.includes(t.key) && (permissions || []).includes(t.key));
   const visibleTabs = isAdmin ? [...TABS, { key: "admin", label: "الإدارة", icon: Users, comp: AdminTab }] : [...BASE_USER_TABS, ...grantedTabs];
@@ -4464,7 +4671,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
     : tab === "maintenance"
       ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, employees, deliveries, setDeliveries, currentUser: user, lang }
+        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser: user, lang }
         : tab === "customers"
           ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }
           : tab === "employees"
@@ -4477,6 +4684,8 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                   ? { fuelRecords, odometerLogs, vehicles, deliveries, lang }
                   : tab === "deliveries"
                     ? { deliveries, setDeliveries, isAdmin, lang }
+                    : tab === "generalReports"
+                    ? { vehicles, fuelRecords, maintenanceRecords, deliveries, employees, lang }
                     : tab === "settings"
                     ? { currentUser: user, lang, setLang, theme, setTheme, notifPermission, requestNotifPermission }
                     : tab === "admin"
@@ -4579,6 +4788,7 @@ function LoginScreen({ errorMsg }) {
 const PERMISSION_OPTIONS = [
   { key: "reports", label: "التقارير" },
   { key: "deliveries", label: "تقارير التسليمات" },
+  { key: "generalReports", label: "التقارير العامة" },
   { key: "vehicles", label: "الأسطول" },
   { key: "employees", label: "الموظفون" },
   { key: "customers", label: "العملاء" },
