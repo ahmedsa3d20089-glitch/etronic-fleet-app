@@ -1880,9 +1880,16 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     "أخرى": { ar: "أخرى", en: "Other" },
   };
   const OIL_INTERVAL_KM = 2000;
-  const [form, setForm] = useState({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
+  // الأنواع دي بس هي اللي بتستخدم تفصيل المصاريف (بدل خانة تكلفة واحدة)
+  const EXPENSE_BREAKDOWN_TYPES = ["صيانة دورية", "إصلاح عطل", "تغيير الزيت"];
+  const emptyForm = { plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "", roadExpenses: "", tollFees: "", vehicleWash: "", spareParts: "", garageFees: "" };
+  const [form, setForm] = useState(emptyForm);
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState(null);
+
+  const usesBreakdown = EXPENSE_BREAKDOWN_TYPES.includes(form.type);
+  const breakdownTotal = ["roadExpenses", "tollFees", "vehicleWash", "spareParts", "garageFees"]
+    .reduce((s, k) => s + (Number(form[k]) || 0), 0);
   const [plateFilter, setPlateFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -1907,12 +1914,13 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
 
   function exportMaintenanceXlsx() {
     const headers = tr(
-      ["المركبة", "التاريخ", "النوع", "التكلفة", "قراءة العداد", "الصيانة القادمة", "ملاحظات"],
-      ["Vehicle", "Date", "Type", "Cost", "Odometer", "Next due", "Notes"]
+      ["المركبة", "التاريخ", "النوع", "التكلفة الإجمالية", "مصاريف الطريق", "رسوم عبور", "غسيل المركبة", "قطع غيار", "أجرة الورشة", "قراءة العداد", "الصيانة القادمة", "ملاحظات"],
+      ["Vehicle", "Date", "Type", "Total Cost", "Road expenses", "Toll fees", "Vehicle wash", "Spare parts", "Garage fees", "Odometer", "Next due", "Notes"]
     );
     const rows = filtered.map(r => [
-      r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type),
-      r.cost, r.odometer || "", r.nextDue || "", r.description || "",
+      r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type), r.cost,
+      r.roadExpenses || "", r.tollFees || "", r.vehicleWash || "", r.spareParts || "", r.garageFees || "",
+      r.odometer || "", r.nextDue || "", r.description || "",
     ]);
     exportTableToXlsx(tr("تقارير الصيانة", "Maintenance Reports"), headers, rows, tr("تقارير_الصيانة.xlsx", "maintenance_reports.xlsx"));
   }
@@ -1920,30 +1928,34 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     exportTableToPdf(
       tr("تقارير الصيانة", "Maintenance Reports"),
       tr(
-        ["المركبة", "التاريخ", "النوع", "التكلفة", "قراءة العداد", "الصيانة القادمة", "ملاحظات"],
-        ["Vehicle", "Date", "Type", "Cost", "Odometer", "Next due", "Notes"]
+        ["المركبة", "التاريخ", "النوع", "التكلفة الإجمالية", "مصاريف الطريق", "عبور", "غسيل", "قطع غيار", "الورشة", "ملاحظات"],
+        ["Vehicle", "Date", "Type", "Total Cost", "Road exp.", "Toll", "Wash", "Parts", "Garage", "Notes"]
       ),
       filtered.map(r => [
-        r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type),
-        r.cost, r.odometer || "", r.nextDue || "", r.description || "",
+        r.plate, r.date, tr(TYPE_LABELS[r.type]?.ar || r.type, TYPE_LABELS[r.type]?.en || r.type), r.cost,
+        r.roadExpenses || "", r.tollFees || "", r.vehicleWash || "", r.spareParts || "", r.garageFees || "", r.description || "",
       ]),
       tr("تقارير_الصيانة.pdf", "maintenance_reports.pdf")
     );
   }
 
   function addRecord() {
-    if (!form.plate || !form.date || !form.cost) return;
+    // لأنواع الصيانة اللي بتستخدم تفصيل المصاريف، التكلفة الإجمالية بتتحسب
+    // أوتوماتيك من مجموع البنود الخمسة، مش بتتكتب يدويًا.
+    const finalCost = usesBreakdown ? breakdownTotal : Number(form.cost) || 0;
+    if (!form.plate || !form.date || !finalCost) return;
     // قراءة العداد إلزامية عند تسجيل "تغيير الزيت" تحديدًا — بدونها لا يقدر
     // النظام يحسب متى موعد التغيير القادم، ويفضل يعتبر المركبة "بلا تغيير مسجَّل"
     // للأبد حتى لو المستخدم فعليًا غيّر الزيت.
     if (form.type === "تغيير الزيت" && !form.odometer) return;
+    const dataToSave = { ...form, cost: finalCost };
     if (editingId !== null) {
-      setRecords(records.map(r => (r.id === editingId ? { ...r, ...form } : r)));
+      setRecords(records.map(r => (r.id === editingId ? { ...r, ...dataToSave } : r)));
       setEditingId(null);
     } else {
-      setRecords([...records, { id: Date.now(), ...form }]);
+      setRecords([...records, { id: Date.now(), ...dataToSave }]);
     }
-    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
+    setForm(emptyForm);
     setPage(1);
   }
   function startEdit(record) {
@@ -1956,11 +1968,16 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
       description: record.description || "",
       nextDue: record.nextDue || "",
       odometer: record.odometer || "",
+      roadExpenses: record.roadExpenses || "",
+      tollFees: record.tollFees || "",
+      vehicleWash: record.vehicleWash || "",
+      spareParts: record.spareParts || "",
+      garageFees: record.garageFees || "",
     });
   }
   function cancelEdit() {
     setEditingId(null);
-    setForm({ plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" });
+    setForm(emptyForm);
   }
   function removeRecord(id) {
     if (!confirm(tr("هل أنت متأكد من حذف سجل الصيانة هذا؟", "Are you sure you want to delete this maintenance record?"))) return;
@@ -2026,8 +2043,10 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
           </select>
           <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
-            className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          {!usesBreakdown && (
+            <input type="number" placeholder={tr("التكلفة", "Cost")} value={form.cost} onChange={e => setForm({ ...form, cost: e.target.value })}
+              className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          )}
           <input type="number" placeholder={form.type === "تغيير الزيت" ? tr("قراءة العداد عند الصيانة *", "Odometer at service *") : tr("قراءة العداد عند الصيانة", "Odometer at service")} value={form.odometer} onChange={e => setForm({ ...form, odometer: e.target.value })}
             className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${form.type === "تغيير الزيت" && !form.odometer ? C.red + "66" : C.border}`, color: C.text }} />
           <input type="date" placeholder={tr("الصيانة القادمة", "Next due date")} value={form.nextDue} onChange={e => setForm({ ...form, nextDue: e.target.value })}
@@ -2035,6 +2054,27 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
           <input type="text" placeholder={tr("ملاحظات", "Notes")} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
             className="col-span-2 md:col-span-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
         </div>
+
+        {usesBreakdown && (
+          <div className="mt-3">
+            <p className="font-ui text-[11.5px] font-semibold mb-2" style={{ color: C.text }}>{tr("تفصيل المصاريف", "Expense breakdown")}</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <input type="number" placeholder={tr("مصاريف الطريق", "Road expenses")} value={form.roadExpenses} onChange={e => setForm({ ...form, roadExpenses: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("رسوم عبور", "Toll fees")} value={form.tollFees} onChange={e => setForm({ ...form, tollFees: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("غسيل المركبة", "Vehicle wash")} value={form.vehicleWash} onChange={e => setForm({ ...form, vehicleWash: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("قطع غيار", "Spare parts")} value={form.spareParts} onChange={e => setForm({ ...form, spareParts: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+              <input type="number" placeholder={tr("أجرة الورشة", "Garage / workshop fees")} value={form.garageFees} onChange={e => setForm({ ...form, garageFees: e.target.value })}
+                className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            </div>
+            <p className="font-ui text-[12px] font-bold mt-2" style={{ color: C.amber }}>
+              {tr("إجمالي التكلفة (محسوبة تلقائيًا): ", "Total cost (calculated automatically): ")}{breakdownTotal.toFixed(2)} {tr("ج.م", "EGP")}
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-3">
           <button onClick={addRecord} className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-ui text-xs font-semibold"
             style={{ background: `${C.amber}22`, color: C.amber }}>
@@ -2149,6 +2189,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
   const [repCode, setRepCode] = useState("");
   const [repName, setRepName] = useState("");
   const [tripPlate, setTripPlate] = useState("");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [routeDate, setRouteDate] = useState("");
 
   const matches = useMemo(() => {
     if (!q.trim()) return [];
@@ -2273,6 +2315,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       return;
     }
     setSavingPod(true);
+    const tripDate = routeDate || todayStr;
     const record = {
       id: Date.now(),
       customerUid: stop.uid,
@@ -2282,6 +2325,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       repCode: repCode,
       repName: repName,
       plate: tripPlate,
+      date: tripDate,
       recipientName: podForm.recipientName || "",
       notes: podForm.notes || "",
       photo: podForm.photo || null,
@@ -2333,6 +2377,13 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
             {tr("يجب إدخال رقم مركبة صحيح لاستخدام خط السير", "You must enter a valid vehicle number to use the route")}
           </p>
         )}
+        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("تاريخ الرحلة", "Trip date")}</h3>
+        <input type="date" value={routeDate} onChange={e => setRouteDate(e.target.value)} max={todayStr}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        <p className="font-ui text-[11px] mt-1.5" style={{ color: C.muted }}>
+          {tr(`اختياري — لو سبته فاضي هيتسجل بتاريخ اليوم (${todayStr}) تلقائيًا`, `Optional — leave empty to use today's date (${todayStr}) automatically`)}
+        </p>
       </div>
 
       {!repName || !vehicleByPlate(tripPlate) ? (
@@ -3785,7 +3836,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     [deliveries]);
 
   const filtered = useMemo(() => (deliveries || []).filter(d => {
-    const dateOnly = (d.deliveredAt || "").slice(0, 10);
+    const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
     return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q))
       && (!repFilter || (d.repName || d.enteredBy) === repFilter)
       && (!statusFilter || d.status === statusFilter)
@@ -3798,10 +3849,10 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
 
   function exportXlsx() {
-    const headers = tr(["التاريخ والوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "ملاحظات"], ["Date & time", "Customer", "Code", "Status", "Recipient", "Rep", "Notes"]);
+    const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Notes"]);
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return [(d.deliveredAt || "").replace("T", " ").slice(0, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""];
+      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""];
     });
     exportTableToXlsx(tr("تقرير التسليمات", "Delivery Report"), headers, rows, tr("تقرير_التسليمات.xlsx", "delivery_report.xlsx"));
   }
@@ -4045,7 +4096,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
   const filteredDeliveries = useMemo(() =>
     (deliveries || []).filter(d =>
-      inRange((d.deliveredAt || "").slice(0, 10)) &&
+      inRange(d.date || (d.deliveredAt || "").slice(0, 10)) &&
       (!plateFilter || d.plate === plateFilter) &&
       (!repFilter || String(d.repCode) === String(repFilter))
     ),
@@ -4057,7 +4108,12 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     return (vehicles || [])
       .filter(v => !plateFilter || v.plate === plateFilter)
       .map(v => {
-        const trips = filteredDeliveries.filter(d => d.plate === v.plate);
+        const stops = filteredDeliveries.filter(d => d.plate === v.plate);
+        // رحلة واحدة = مندوب واحد + مركبة واحدة + يوم واحد، بغض النظر عن عدد
+        // العملاء اللي اتزاروا في نفس اليوم — مش رحلة لكل عميل على حدة.
+        const uniqueTrips = new Set(stops.map(d => `${d.repCode}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
+        const deliveredCount = stops.filter(d => d.status === "تم التسليم").length;
+        const undeliveredCount = stops.filter(d => d.status === "لم يتم التسليم").length;
         const fills = perFillAll.filter(r => r.plate === v.plate && inRange(r.date));
         const maint = (maintenanceRecords || []).filter(r => r.plate === v.plate && inRange(r.date));
 
@@ -4082,7 +4138,8 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
         return {
           plate: v.plate,
-          tripsCount: trips.length,
+          tripsCount: uniqueTrips.size,
+          deliveredCount, undeliveredCount,
           totalDistance, totalLiters, kmPerLiter, literPer100km,
           fuelCost, maintenanceCost, maintenanceTypesSummary,
           totalOperationalCost, costPerKm,
@@ -4092,20 +4149,22 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
   const totals = useMemo(() => perVehicle.reduce((acc, r) => ({
     trips: acc.trips + r.tripsCount,
+    delivered: acc.delivered + r.deliveredCount,
+    undelivered: acc.undelivered + r.undeliveredCount,
     distance: acc.distance + r.totalDistance,
     liters: acc.liters + r.totalLiters,
     fuelCost: acc.fuelCost + r.fuelCost,
     maintenanceCost: acc.maintenanceCost + r.maintenanceCost,
     operationalCost: acc.operationalCost + r.totalOperationalCost,
-  }), { trips: 0, distance: 0, liters: 0, fuelCost: 0, maintenanceCost: 0, operationalCost: 0 }), [perVehicle]);
+  }), { trips: 0, delivered: 0, undelivered: 0, distance: 0, liters: 0, fuelCost: 0, maintenanceCost: 0, operationalCost: 0 }), [perVehicle]);
 
   function exportXlsx() {
     const headers = tr(
-      ["المركبة", "عدد الرحلات", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة/كم"],
-      ["Vehicle", "Trips", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost/km"]
+      ["المركبة", "عدد الرحلات", "عملاء تم التسليم", "عملاء لم يتم التسليم", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة/كم"],
+      ["Vehicle", "Trips", "Delivered", "Undelivered", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost/km"]
     );
     const rows = perVehicle.map(r => [
-      r.plate, r.tripsCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
       round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round2(r.costPerKm),
     ]);
     exportTableToXlsx(tr("التقارير العامة", "General Reports"), headers, rows, tr("التقارير_العامة.xlsx", "general_reports.xlsx"));
@@ -4114,11 +4173,11 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     exportTableToPdf(
       tr("التقارير العامة", "General Reports"),
       tr(
-        ["المركبة", "الرحلات", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة/كم"],
-        ["Vehicle", "Trips", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/km"]
+        ["المركبة", "الرحلات", "تم التسليم", "لم يتم", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة/كم"],
+        ["Vehicle", "Trips", "Delivered", "Undelivered", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/km"]
       ),
       perVehicle.map(r => [
-        r.plate, r.tripsCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+        r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
         round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round2(r.costPerKm),
       ]),
       tr("التقارير_العامة.pdf", "general_reports.pdf")
@@ -4149,6 +4208,8 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Navigation} value={totals.trips} label={tr("إجمالي عدد الرحلات", "Total trips")} color={C.teal} />
+        <KpiCard icon={CheckCircle} value={totals.delivered} label={tr("عملاء تم التسليم لهم", "Delivered customers")} color={C.teal} />
+        <KpiCard icon={XCircle} value={totals.undelivered} label={tr("عملاء لم يتم تسليمهم", "Undelivered customers")} color={totals.undelivered ? C.red : C.muted} />
         <KpiCard icon={TrendingUp} value={round1(totals.distance)} label={tr("إجمالي الكيلومترات", "Total kilometers")} color={C.teal} />
         <KpiCard icon={Fuel} value={round1(totals.liters)} label={tr("إجمالي الوقود المستهلك (لتر)", "Total fuel consumed (L)")} color={C.amber} />
         <KpiCard icon={Fuel} value={round1(totals.fuelCost)} label={tr("إجمالي تكلفة الوقود", "Total fuel cost")} color={C.amber} />
@@ -4165,11 +4226,13 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         <EmptyState text={tr("لا توجد مركبات مسجَّلة بعد", "No vehicles registered yet")} />
       ) : (
         <div className="overflow-x-auto rounded-2xl" style={{ border: `1px solid ${C.border}` }}>
-          <table className="w-full text-right" style={{ minWidth: 900 }}>
+          <table className="w-full text-right" style={{ minWidth: 1080 }}>
             <thead>
               <tr style={{ background: C.surface2 }}>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المركبة", "Vehicle")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("الرحلات", "Trips")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تم التسليم", "Delivered")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("لم يتم التسليم", "Undelivered")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("المسافة (كم)", "Distance (km)")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("اللترات", "Liters")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("كم/لتر", "Km/L")}</th>
@@ -4186,6 +4249,8 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                 <tr key={r.plate} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{r.plate}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.tripsCount}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.teal }}>{r.deliveredCount}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: r.undeliveredCount ? C.red : C.muted }}>{r.undeliveredCount}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalDistance)}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalLiters)}</td>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{r.kmPerLiter ? round2(r.kmPerLiter) : "—"}</td>
