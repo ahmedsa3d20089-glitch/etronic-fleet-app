@@ -624,7 +624,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("توزيع المركبات حسب حالة استهلاك الوقود", "Vehicle breakdown by fuel-consumption status")}</h3>
-        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب التقارير — كل مركبة مصنَّفة حسب انحرافها عن أدائها المعتاد", "Same deviation analysis as the Reports tab — each vehicle classified by its deviation from its own normal performance")}</p>
+        <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("نفس تحليل الانحراف الموجود في تبويب تقارير الوقود — كل مركبة مصنَّفة حسب انحرافها عن أدائها المعتاد", "Same deviation analysis as the Fuel Reports tab — each vehicle classified by its deviation from its own normal performance")}</p>
         {vehiclesCount === 0 ? (
           <p className="font-ui text-xs" style={{ color: C.muted }}>{tr("لا توجد مركبات مسجَّلة بعد", "No vehicles registered yet")}</p>
         ) : (
@@ -639,7 +639,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
                 { label: tr("بيانات غير كافية", "Not enough data"), value: statusBreakdown.noData, color: C.muted },
               ]}
             />
-            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("التفاصيل الكاملة والأسباب المحتملة لكل مركبة في تبويب \"التقارير\"", "Full details and possible causes for each vehicle are in the \"Reports\" tab")}</p>
+            <p className="font-ui text-[11px] mt-3" style={{ color: C.muted }}>{tr("التفاصيل الكاملة والأسباب المحتملة لكل مركبة في تبويب \"تقارير الوقود\"", "Full details and possible causes for each vehicle are in the \"Fuel Reports\" tab")}</p>
           </>
         )}
       </div>
@@ -2617,7 +2617,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
   return (
     <div>
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("قراءة العداد", "Odometer")}</h2>
-      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجّل قراءة عداد كل مركبة بالتاريخ — يُحتسب منها الاستهلاك اليومي في تبويب التقارير", "Log each vehicle's odometer reading by date — used to compute daily usage in the Reports tab")}</p>
+      <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("سجّل قراءة عداد كل مركبة بالتاريخ — يُحتسب منها الاستهلاك اليومي في تبويب تقارير الوقود", "Log each vehicle's odometer reading by date — used to compute daily usage in the Fuel Reports tab")}</p>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("إضافة قراءة", "Add a reading")}</h3>
@@ -3334,7 +3334,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("التقارير", "Reports")}</h2>
+      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("تقارير الوقود", "Fuel Reports")}</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("تحليل الاستهلاك الوقود وكشف التلاعب والكيلومترات لكل مركبة", "Fuel consumption analysis, tampering detection, and kilometers per vehicle")}</p>
 
       <div className="rounded-2xl p-3 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -3791,10 +3791,29 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [viewPhoto, setViewPhoto] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ status: "", plate: "", date: "", recipientName: "", notes: "" });
 
   function removeDelivery(id) {
     if (!confirm(tr("هل أنت متأكد من حذف سجل التسليم هذا؟ هذا الإجراء نهائي.", "Are you sure you want to delete this delivery record? This cannot be undone."))) return;
     setDeliveries((deliveries || []).filter(d => d.id !== id));
+  }
+  function startEditDelivery(d) {
+    setEditingId(d.id);
+    setEditForm({
+      status: d.status || "",
+      plate: d.plate || "",
+      date: d.date || (d.deliveredAt || "").slice(0, 10),
+      recipientName: d.recipientName || "",
+      notes: d.notes || "",
+    });
+  }
+  function cancelEditDelivery() {
+    setEditingId(null);
+  }
+  function saveEditDelivery(id) {
+    setDeliveries((deliveries || []).map(d => (d.id === id ? { ...d, ...editForm } : d)));
+    setEditingId(null);
   }
 
   const repOptions = useMemo(() =>
@@ -3883,28 +3902,63 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
         <>
           <div className="space-y-2">
             {paged.map(d => (
-              <div key={d.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: d.status === "تم التسليم" ? `${C.teal}22` : `${C.red}18` }}>
-                  {d.status === "تم التسليم" ? <CheckCircle size={14} color={C.teal} /> : <XCircle size={14} color={C.red} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{d.customerName || tr("بدون اسم", "No name")}</p>
-                  <p className="font-ui text-xs truncate" style={{ color: C.muted }}>
-                    {d.date || (d.deliveredAt || "").slice(0, 10)}
-                    {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
-                    {(d.repName || d.enteredBy) ? ` · ${tr("المندوب", "Rep")}: ${d.repName || d.enteredBy}` : ""}
-                    {d.notes ? ` · ${d.notes}` : ""}
-                  </p>
-                </div>
-                {d.photo && <PhotoThumb src={d.photo} alt={tr("إثبات تسليم", "delivery proof")} onView={setViewPhoto} />}
-                <span className="font-ui text-[11px] font-bold shrink-0 px-2.5 py-1 rounded-full"
-                  style={{ background: d.status === "تم التسليم" ? `${C.teal}22` : `${C.red}18`, color: d.status === "تم التسليم" ? C.teal : C.red }}>
-                  {d.status === "تم التسليم" ? "✅ " + tr("تم التسليم", "Delivered") : "❌ " + tr("لم يتم التسليم", "Not delivered")}
-                </span>
-                {isAdmin && (
-                  <button onClick={() => removeDelivery(d.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
-                    <Trash2 size={13} color={C.red} />
-                  </button>
+              <div key={d.id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: C.surface, border: `1px solid ${editingId === d.id ? C.amber : C.border}` }}>
+                {editingId === d.id ? (
+                  <div className="flex-1 min-w-0">
+                    <p className="font-ui font-semibold text-sm mb-2" style={{ color: C.text }}>{d.customerName || tr("بدون اسم", "No name")}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                      <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}
+                        className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
+                        <option value="تم التسليم">{tr("تم التسليم", "Delivered")}</option>
+                        <option value="لم يتم التسليم">{tr("لم يتم التسليم", "Not delivered")}</option>
+                      </select>
+                      <input type="text" placeholder={tr("رقم المركبة", "Vehicle number")} value={editForm.plate} onChange={e => setEditForm({ ...editForm, plate: e.target.value })}
+                        className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                        className="rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <input type="text" placeholder={tr("اسم المستلم", "Recipient name")} value={editForm.recipientName} onChange={e => setEditForm({ ...editForm, recipientName: e.target.value })}
+                        className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                      <input type="text" placeholder={tr("ملاحظات", "Notes")} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                        className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button onClick={() => saveEditDelivery(d.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
+                        <CheckCircle size={13} /> {tr("حفظ التعديل", "Save changes")}
+                      </button>
+                      <button onClick={cancelEditDelivery} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: C.surface2, color: C.muted }}>
+                        <XCircle size={13} /> {tr("إلغاء", "Cancel")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: d.status === "تم التسليم" ? `${C.teal}22` : `${C.red}18` }}>
+                      {d.status === "تم التسليم" ? <CheckCircle size={14} color={C.teal} /> : <XCircle size={14} color={C.red} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-ui font-semibold text-sm truncate" style={{ color: C.text }}>{d.customerName || tr("بدون اسم", "No name")}</p>
+                      <p className="font-ui text-xs truncate" style={{ color: C.muted }}>
+                        {d.date || (d.deliveredAt || "").slice(0, 10)}
+                        {d.plate ? ` · ${tr("المركبة", "Vehicle")}: ${d.plate}` : ""}
+                        {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
+                        {(d.repName || d.enteredBy) ? ` · ${tr("المندوب", "Rep")}: ${d.repName || d.enteredBy}` : ""}
+                        {d.notes ? ` · ${d.notes}` : ""}
+                      </p>
+                    </div>
+                    {d.photo && <PhotoThumb src={d.photo} alt={tr("إثبات تسليم", "delivery proof")} onView={setViewPhoto} />}
+                    <span className="font-ui text-[11px] font-bold shrink-0 px-2.5 py-1 rounded-full"
+                      style={{ background: d.status === "تم التسليم" ? `${C.teal}22` : `${C.red}18`, color: d.status === "تم التسليم" ? C.teal : C.red }}>
+                      {d.status === "تم التسليم" ? "✅ " + tr("تم التسليم", "Delivered") : "❌ " + tr("لم يتم التسليم", "Not delivered")}
+                    </span>
+                    <button onClick={() => startEditDelivery(d)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.teal}18` }}>
+                      <Edit size={13} color={C.teal} />
+                    </button>
+                    {isAdmin && (
+                      <button onClick={() => removeDelivery(d.id)} className="p-1.5 rounded-lg shrink-0" style={{ background: `${C.red}18` }}>
+                        <Trash2 size={13} color={C.red} />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -4247,7 +4301,7 @@ const TABS = [
   { key: "fuel", label: "الوقود", icon: Fuel, comp: FuelTab },
   { key: "maintenance", label: "الصيانة", icon: Wrench, comp: MaintenanceTab },
   { key: "odometer", label: "قراءة العداد", icon: TrendingUp, comp: OdometerTab },
-  { key: "reports", label: "التقارير", icon: Building2, comp: ReportsTab },
+  { key: "reports", label: "تقارير الوقود", icon: Building2, comp: ReportsTab },
   { key: "deliveries", label: "تقارير التسليمات", icon: Package, comp: DeliveryReportsTab },
   { key: "generalReports", label: "تقارير عامة", icon: TrendingUp, comp: GeneralReportsTab },
   { key: "vehicles", label: "الأسطول", icon: Truck, comp: VehiclesTab },
@@ -4418,7 +4472,7 @@ const TAB_LABELS = {
   fuel: { ar: "الوقود", en: "Fuel" },
   maintenance: { ar: "الصيانة", en: "Maintenance" },
   odometer: { ar: "قراءة العداد", en: "Odometer" },
-  reports: { ar: "التقارير", en: "Reports" },
+  reports: { ar: "تقارير الوقود", en: "Fuel Reports" },
   deliveries: { ar: "تقارير التسليمات", en: "Delivery Reports" },
   generalReports: { ar: "تقارير عامة", en: "General Reports" },
   vehicles: { ar: "الأسطول", en: "Fleet" },
@@ -4823,7 +4877,7 @@ function LoginScreen({ errorMsg }) {
 }
 
 const PERMISSION_OPTIONS = [
-  { key: "reports", label: "التقارير" },
+  { key: "reports", label: "تقارير الوقود" },
   { key: "deliveries", label: "تقارير التسليمات" },
   { key: "generalReports", label: "تقارير عامة" },
   { key: "vehicles", label: "الأسطول" },
