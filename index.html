@@ -663,7 +663,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   );
 }
 
-function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
+function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const STATUS_LABELS = {
     "نشطة": { ar: "نشطة", en: "Active" },
@@ -701,7 +701,10 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الأسطول (${vehicles.length} مركبة)`, `Fleet (${vehicles.length} vehicles)`)}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-ui font-extrabold text-xl" style={{ color: C.text }}>{tr(`الأسطول (${vehicles.length} مركبة)`, `Fleet (${vehicles.length} vehicles)`)}</h2>
+        <RefreshButton onRefresh={refreshVehicles} lang={lang} />
+      </div>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -776,7 +779,7 @@ function VehiclesTab({ vehicles, setVehicles, isAdmin, lang }) {
   );
 }
 
-function EmployeesTab({ employees, setEmployees, isAdmin, lang }) {
+function EmployeesTab({ employees, setEmployees, refreshEmployees, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -814,7 +817,10 @@ function EmployeesTab({ employees, setEmployees, isAdmin, lang }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr(`الموظفون (${employees.length})`, `Employees (${employees.length})`)}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-ui font-extrabold text-xl" style={{ color: C.text }}>{tr(`الموظفون (${employees.length})`, `Employees (${employees.length})`)}</h2>
+        <RefreshButton onRefresh={refreshEmployees} lang={lang} />
+      </div>
 
       {isAdmin && (
         <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -929,7 +935,7 @@ function openInGoogleMaps(loc, fallbackParts) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank");
 }
 
-function CustomersTab({ customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }) {
+function CustomersTab({ customers, setCustomers, customerLocations, setCustomerLocations, refreshCustomers, refreshCustomerLocations, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -1039,7 +1045,10 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr(`العملاء (${customers.length})`, `Customers (${customers.length})`)}</h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-ui font-extrabold text-xl" style={{ color: C.text }}>{tr(`العملاء (${customers.length})`, `Customers (${customers.length})`)}</h2>
+        <RefreshButton onRefresh={() => { refreshCustomers && refreshCustomers(); refreshCustomerLocations && refreshCustomerLocations(); }} lang={lang} />
+      </div>
       <p className="font-ui text-xs mb-4" style={{ color: C.muted }}>{tr("احفظ الموقع أثناء وجودك لدى العميل بالضغط على زر GPS، أو أضفه عن بُعد من رابط Google Maps أو بالإحداثيات مباشرة", "Save the location while you're at the customer using the GPS button, or add it remotely via a Google Maps link or coordinates")}</p>
 
       {isAdmin && (
@@ -1190,6 +1199,27 @@ function EmptyState({ text }) {
   );
 }
 
+// بيانات المركبات/الموظفين/العملاء/الحسابات بتتحمّل مرة واحدة بس (مش لحظيًا)
+// عشان توفّر في حصة Firestore اليومية — الزرار ده بيدّي المستخدم طريقة يجيب
+// بيها آخر تحديث يدويًا وقت ما يحتاجه، بدل ما يفضل التطبيق مستمع طول الوقت.
+function RefreshButton({ onRefresh, lang }) {
+  const tr = (ar, en) => (lang === "en" ? en : ar);
+  const [spinning, setSpinning] = useState(false);
+  function handleClick() {
+    if (!onRefresh) return;
+    setSpinning(true);
+    onRefresh();
+    setTimeout(() => setSpinning(false), 700);
+  }
+  return (
+    <button onClick={handleClick} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold"
+      style={{ background: C.surface2, color: C.muted, border: `1px solid ${C.border}` }}>
+      <span style={{ display: "inline-block", transition: "transform .7s ease", transform: spinning ? "rotate(360deg)" : "rotate(0deg)" }}>🔄</span>
+      {tr("تحديث", "Refresh")}
+    </button>
+  );
+}
+
 function PhotoThumb({ src, alt, onView }) {
   return (
     <img src={src} alt={alt} onClick={() => onView(src)}
@@ -1255,7 +1285,28 @@ function announceSaving() {
   saveStatusListeners.forEach(fn => fn(saveStatusState));
 }
 function announceSaved(err) {
-  if (err) console.error("Etronic Fleet — فشل حفظ في Firestore:", err.code || "", err.message || err);
+  if (err) {
+    console.error("Etronic Fleet — فشل حفظ في Firestore:", err.code || "", err.message || err);
+    // تنبيه فعلي (مش بس شريط في الشاشة) لما الحصة اليومية لـ Firestore تتجاوز،
+    // لأن ده معناه إن البيانات فعليًا مش بتتسجل خالص. بحد أقصى تنبيه واحد كل
+    // 30 دقيقة عشان ما نغرقش المستخدم برسائل متكررة لنفس المشكلة المستمرة.
+    if (err.code === "resource-exhausted") {
+      try {
+        const last = Number(localStorage.getItem("etronic_quota_alert_at") || 0);
+        if (Date.now() - last > 30 * 60 * 1000) {
+          localStorage.setItem("etronic_quota_alert_at", String(Date.now()));
+          if (typeof showFleetNotification === "function") {
+            showFleetNotification(
+              "⚠ تم تجاوز الحد اليومي لقاعدة البيانات",
+              "البيانات الجديدة لن تُحفظ حتى تُتاح الحصة مجددًا أو تتم ترقية الخطة",
+              "quota-exceeded",
+              { screen_to_open: "settings" }
+            );
+          }
+        }
+      } catch (e) {}
+    }
+  }
   saveStatusState = { count: Math.max(0, saveStatusState.count - 1), lastError: err || null };
   saveStatusListeners.forEach(fn => fn(saveStatusState));
 }
@@ -1280,6 +1331,21 @@ function SaveIndicator() {
     prevCount.current = count;
   }, [count, lastError]);
   if (count === 0 && !showSaved && !lastError) return null;
+
+  // كود "resource-exhausted" هو تحديدًا كود Firestore لما بيتجاوز الحد
+  // اليومي المجاني للقراءة/الكتابة — لازم يبان بوضوح تام ومش بس رسالة
+  // عامة، لأنه بيعني إن البيانات فعليًا مش بتتسجل خالص لحد ما الحصة ترجع.
+  const isQuotaExceeded = lastError && lastError.code === "resource-exhausted";
+
+  if (isQuotaExceeded) {
+    return (
+      <div className="fixed inset-x-0 top-0 z-[999] px-4 py-3 font-ui text-sm font-bold text-center shadow-lg"
+        style={{ background: C.red, color: "#fff" }}>
+        ⚠ تم تجاوز الحد اليومي المسموح به في قاعدة البيانات (Firestore) — البيانات الجديدة لن تُحفظ حتى تُتاح الحصة مجددًا أو تتم ترقية الخطة.
+      </div>
+    );
+  }
+
   const label = lastError ? "⚠ فشل الحفظ — تأكد من الاتصال بالإنترنت" : (count > 0 ? "جارٍ الحفظ..." : "✓ تم الحفظ");
   const color = lastError ? C.red : (count > 0 ? C.amber : C.teal);
   return (
@@ -2154,6 +2220,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
   const [savingPod, setSavingPod] = useState(false);
   const [repCode, setRepCode] = useState("");
   const [repName, setRepName] = useState("");
+  const [repCode2, setRepCode2] = useState("");
+  const [repName2, setRepName2] = useState("");
   const [tripPlate, setTripPlate] = useState("");
   const todayStr = new Date().toISOString().slice(0, 10);
   const [routeDate, setRouteDate] = useState("");
@@ -2262,6 +2330,11 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
     setRepCode(code);
     setRepName(match ? match.name : "");
   }
+  function handleRepCode2Change(code) {
+    const match = repByCode(code);
+    setRepCode2(code);
+    setRepName2(match ? match.name : "");
+  }
   function handlePodPhoto(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -2290,6 +2363,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       status: podForm.status,
       repCode: repCode,
       repName: repName,
+      repCode2: repCode2 || "",
+      repName2: repName2 || "",
       plate: tripPlate,
       date: tripDate,
       recipientName: podForm.recipientName || "",
@@ -2327,6 +2402,16 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
         ) : (
           <p className="font-ui text-[11px] mt-1.5" style={{ color: C.red }}>
             {tr("يجب إدخال كود المندوب الصحيح أولًا لاستخدام خط السير", "You must enter a valid rep code first to use the route")}
+          </p>
+        )}
+        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("مندوب آخر (اختياري)", "Additional rep (optional)")}</h3>
+        <input type="text" placeholder={tr("اكتب كود المندوب الآخر هنا", "Enter the additional rep's code here")}
+          value={repCode2} onChange={e => handleRepCode2Change(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        {repCode2 && (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName2 ? C.teal : C.red }}>
+            {repName2 ? tr(`✓ المندوب الآخر: ${repName2}`, `✓ Additional rep: ${repName2}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
           </p>
         )}
         <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("رقم المركبة", "Vehicle number")}</h3>
@@ -3822,7 +3907,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
 
   const filtered = useMemo(() => (deliveries || []).filter(d => {
     const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
-    return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q))
+    return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || (d.plate || "").toLowerCase().includes(q.toLowerCase()))
       && (!repFilter || (d.repName || d.enteredBy) === repFilter)
       && (!statusFilter || d.status === statusFilter)
       && (!dateFrom || dateOnly >= dateFrom)
@@ -3876,7 +3961,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
             <button onClick={exportPdf} disabled={!filtered.length} className="px-2.5 py-1.5 rounded-lg font-ui text-[11px] font-semibold disabled:opacity-40" style={{ background: `${C.red}18`, color: C.red }}>⬇ PDF</button>
           </div>
         </div>
-        <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={tr("ابحث باسم العميل أو الكود...", "Search by customer name or code...")} />
+        <SearchBox value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder={tr("ابحث باسم العميل أو الكود أو رقم المركبة...", "Search by customer name, code, or vehicle number...")} />
         <div className="flex items-center gap-2 flex-wrap">
           <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} placeholder={tr("من تاريخ", "From")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
@@ -3884,7 +3969,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <select value={repFilter} onChange={e => { setRepFilter(e.target.value); setPage(1); }}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("كل المناديب", "All reps")}</option>
+            <option value="">{tr("المناديب والسائقين", "Reps & drivers")}</option>
             {repOptions.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
@@ -4343,19 +4428,20 @@ function logAudit(currentUser, action, details) {
 // أول مرة تلاقي الـ collection فاضية، بتهاجر البيانات أوتوماتيك من نظام
 // التخزين القديم (etronic_data/{key})، والنسخة القديمة بتفضل موجودة
 // كنسخة احتياطية ومبيتمسحش منها حاجة.
-function useFirestoreCollection(key, initialFn, idField = "id") {
+function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
   const [state, setState] = useState(initialFn());
   const [ready, setReady] = useState(false);
   const stateRef = React.useRef(state);
   stateRef.current = state;
   const migratingRef = React.useRef(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   React.useEffect(() => {
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
     const legacyRef = db.collection("etronic_data").doc(key);
     let cancelled = false;
 
-    const unsub = colRef.onSnapshot(async (snap) => {
+    async function handleSnap(snap) {
       if (cancelled) return;
       if (!snap.empty || migratingRef.current) {
         console.log("[etronic] collection", key, "loaded", snap.docs.length, "docs");
@@ -4379,13 +4465,27 @@ function useFirestoreCollection(key, initialFn, idField = "id") {
         console.error("[etronic] collection migration failed for", key, e);
         setReady(true);
       }
-    }, (e) => {
-      console.error("[etronic] collection onSnapshot error for", key, e);
+    }
+
+    if (live) {
+      const unsub = colRef.onSnapshot(handleSnap, (e) => {
+        console.error("[etronic] collection onSnapshot error for", key, e);
+        setReady(true);
+      });
+      return () => { cancelled = true; unsub(); };
+    }
+    // قراءة لمرة واحدة بدل استماع مستمر — بتقلل استهلاك حصة Firestore
+    // اليومية بشكل كبير جدًا للمجموعات اللي مش محتاجة تحديث لحظي (زي
+    // العملاء بعددهم الكبير). تحديث البيانات بيحصل يدويًا بزرار "تحديث"
+    // في الشاشة، أو تلقائيًا أول ما التبويب يُفتح.
+    colRef.get().then(handleSnap).catch((e) => {
+      console.error("[etronic] collection get() error for", key, e);
       setReady(true);
     });
+    return () => { cancelled = true; };
+  }, [key, live, refreshTick]);
 
-    return () => { cancelled = true; unsub(); };
-  }, [key]);
+  function refresh() { setReady(false); setRefreshTick(t => t + 1); }
 
   function setAndSync(updater) {
     const prev = stateRef.current;
@@ -4393,32 +4493,44 @@ function useFirestoreCollection(key, initialFn, idField = "id") {
     setState(next);
     announceSaving();
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    // بنكتب بس العناصر اللي اتضافت أو اتغيّرت فعليًا، مش كل عناصر المجموعة من
+    // جديد في كل مرة — قبل كده أي تعديل بسيط في سجل واحد كان بيعيد كتابة كل
+    // السجلات التانية (زي 1399 عميل!) وده اللي كان بيستهلك حصة الكتابة
+    // اليومية في Firestore بسرعة جدًا ويسبب أخطاء "تجاوزت حدود الاستخدام".
+    const prevById = new Map(prev.map(item => [String(item[idField]), item]));
     const nextIds = new Set(next.map(item => String(item[idField])));
+    const changed = next.filter(item => {
+      const old = prevById.get(String(item[idField]));
+      return !old || JSON.stringify(old) !== JSON.stringify(item);
+    });
+    const removed = prev.filter(item => !nextIds.has(String(item[idField])));
     const ops = [
-      ...next.map(item => ({ type: "set", ref: colRef.doc(String(item[idField])), data: item })),
-      ...prev.filter(item => !nextIds.has(String(item[idField]))).map(item => ({ type: "delete", ref: colRef.doc(String(item[idField])) })),
+      ...changed.map(item => ({ type: "set", ref: colRef.doc(String(item[idField])), data: item })),
+      ...removed.map(item => ({ type: "delete", ref: colRef.doc(String(item[idField])) })),
     ];
+    if (ops.length === 0) { announceSaved(null); return; }
     commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
   }
 
-  return [state, setAndSync, ready];
+  return [state, setAndSync, ready, refresh];
 }
 
 // نفس فكرة useFirestoreCollection، بس لبيانات على شكل object/map (زي مواقع
 // العملاء المخزنة بمفتاح uid لكل عميل) بدل array من السجلات
-function useFirestoreMap(key, initialFn) {
+function useFirestoreMap(key, initialFn, live = true) {
   const [state, setState] = useState(initialFn());
   const [ready, setReady] = useState(false);
   const stateRef = React.useRef(state);
   stateRef.current = state;
   const migratingRef = React.useRef(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   React.useEffect(() => {
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
     const legacyRef = db.collection("etronic_data").doc(key);
     let cancelled = false;
 
-    const unsub = colRef.onSnapshot(async (snap) => {
+    async function handleSnap(snap) {
       if (cancelled) return;
       if (!snap.empty || migratingRef.current) {
         console.log("[etronic] map", key, "loaded", snap.docs.length, "docs");
@@ -4440,13 +4552,23 @@ function useFirestoreMap(key, initialFn) {
         console.error("[etronic] map migration failed for", key, e);
         setReady(true);
       }
-    }, (e) => {
-      console.error("[etronic] map onSnapshot error for", key, e);
+    }
+
+    if (live) {
+      const unsub = colRef.onSnapshot(handleSnap, (e) => {
+        console.error("[etronic] map onSnapshot error for", key, e);
+        setReady(true);
+      });
+      return () => { cancelled = true; unsub(); };
+    }
+    colRef.get().then(handleSnap).catch((e) => {
+      console.error("[etronic] map get() error for", key, e);
       setReady(true);
     });
+    return () => { cancelled = true; };
+  }, [key, live, refreshTick]);
 
-    return () => { cancelled = true; unsub(); };
-  }, [key]);
+  function refresh() { setReady(false); setRefreshTick(t => t + 1); }
 
   function setAndSync(updater) {
     const prev = stateRef.current;
@@ -4454,14 +4576,21 @@ function useFirestoreMap(key, initialFn) {
     setState(next);
     announceSaving();
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
+    // بنكتب بس المفاتيح اللي اتضافت أو اتغيّرت فعليًا، مش الخريطة كلها من جديد
+    const changedEntries = Object.entries(next).filter(([k, v]) => {
+      const old = prev[k];
+      return old === undefined || JSON.stringify(old) !== JSON.stringify(v);
+    });
+    const removedKeys = Object.keys(prev).filter(k => !(k in next));
     const ops = [
-      ...Object.entries(next).map(([k, v]) => ({ type: "set", ref: colRef.doc(String(k)), data: v })),
-      ...Object.keys(prev).filter(k => !(k in next)).map(k => ({ type: "delete", ref: colRef.doc(String(k)) })),
+      ...changedEntries.map(([k, v]) => ({ type: "set", ref: colRef.doc(String(k)), data: v })),
+      ...removedKeys.map(k => ({ type: "delete", ref: colRef.doc(String(k)) })),
     ];
+    if (ops.length === 0) { announceSaved(null); return; }
     commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
   }
 
-  return [state, setAndSync, ready];
+  return [state, setAndSync, ready, refresh];
 }
 
 // ترجمة أولى للواجهة (القائمة الجانبية + الرئيسية + الإعدادات) — تجربة أولى
@@ -4683,13 +4812,13 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreCollection("etronic_fuel", () => []);
   const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreCollection("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
-  const [customers, setCustomers, customersReady] = useFirestoreCollection("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })));
-  const [employees, setEmployees, employeesReady] = useFirestoreCollection("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })));
-  const [vehicles, setVehicles, vehiclesReady] = useFirestoreCollection("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })));
+  const [customers, setCustomers, customersReady, refreshCustomers] = useFirestoreCollection("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })), "id", false);
+  const [employees, setEmployees, employeesReady, refreshEmployees] = useFirestoreCollection("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })), "id", false);
+  const [vehicles, setVehicles, vehiclesReady, refreshVehicles] = useFirestoreCollection("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })), "id", false);
   const [odometerLogs, setOdometerLogs, odometerReady] = useFirestoreCollection("etronic_odometer", () => []);
-  const [customerLocations, setCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}));
-  const [accounts, setAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email");
-  const [auditLog] = useFirestoreCollection("etronic_audit_log", () => []);
+  const [customerLocations, setCustomerLocations, , refreshCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}), false);
+  const [accounts, setAccounts, , refreshAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email", false);
+  const [auditLog, , , refreshAuditLog] = useFirestoreCollection("etronic_audit_log", () => [], "id", false);
   const [deliveries, setDeliveries] = useFirestoreCollection("etronic_deliveries", () => []);
   const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
 
@@ -4764,11 +4893,11 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
       : tab === "route"
         ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser: user, lang }
         : tab === "customers"
-          ? { customers, setCustomers, customerLocations, setCustomerLocations, isAdmin, lang }
+          ? { customers, setCustomers, customerLocations, setCustomerLocations, refreshCustomers, refreshCustomerLocations, isAdmin, lang }
           : tab === "employees"
-            ? { employees, setEmployees, isAdmin, lang }
+            ? { employees, setEmployees, refreshEmployees, isAdmin, lang }
             : tab === "vehicles"
-              ? { vehicles, setVehicles, isAdmin, lang }
+              ? { vehicles, setVehicles, refreshVehicles, isAdmin, lang }
               : tab === "odometer"
                 ? { logs: odometerLogs, setLogs: setOdometerLogs, vehicles, currentUser: user, isAdmin, lang }
                 : tab === "reports"
@@ -4780,7 +4909,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                     : tab === "settings"
                     ? { currentUser: user, lang, setLang, theme, setTheme, notifPermission, requestNotifPermission }
                     : tab === "admin"
-                      ? { accounts, setAccounts, currentUser: user, auditLog, lang }
+                      ? { accounts, setAccounts, currentUser: user, auditLog, refreshAccounts, refreshAuditLog, lang }
                       : tab === "dash"
                         ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }
                         : {};
@@ -4885,7 +5014,7 @@ const PERMISSION_OPTIONS = [
   { key: "customers", label: "العملاء" },
 ];
 
-function AdminTab({ accounts, setAccounts, currentUser, auditLog, lang }) {
+function AdminTab({ accounts, setAccounts, currentUser, auditLog, refreshAccounts, refreshAuditLog, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const ACTION_LABELS = {
     "إنشاء حساب": { ar: "إنشاء حساب", en: "Account created" },
@@ -4967,7 +5096,10 @@ function AdminTab({ accounts, setAccounts, currentUser, auditLog, lang }) {
 
   return (
     <div>
-      <h2 className="font-ui font-extrabold text-xl mb-4" style={{ color: C.text }}>{tr("إدارة الحسابات", "Account management")}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-ui font-extrabold text-xl" style={{ color: C.text }}>{tr("إدارة الحسابات", "Account management")}</h2>
+        <RefreshButton onRefresh={() => { refreshAccounts && refreshAccounts(); refreshAuditLog && refreshAuditLog(); }} lang={lang} />
+      </div>
 
       <div className="rounded-2xl p-4 mb-5" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("تغيير كلمة المرور لحسابي", "Change my password")}</h3>
