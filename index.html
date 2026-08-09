@@ -2222,6 +2222,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
   const [repName, setRepName] = useState("");
   const [repCode2, setRepCode2] = useState("");
   const [repName2, setRepName2] = useState("");
+  const [driverCode, setDriverCode] = useState("");
+  const [driverName, setDriverName] = useState("");
   const [tripPlate, setTripPlate] = useState("");
   const todayStr = new Date().toISOString().slice(0, 10);
   const [routeDate, setRouteDate] = useState("");
@@ -2335,6 +2337,11 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
     setRepCode2(code);
     setRepName2(match ? match.name : "");
   }
+  function handleDriverCodeChange(code) {
+    const match = repByCode(code);
+    setDriverCode(code);
+    setDriverName(match ? match.name : "");
+  }
   function handlePodPhoto(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -2365,6 +2372,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       repName: repName,
       repCode2: repCode2 || "",
       repName2: repName2 || "",
+      driverCode: driverCode || "",
+      driverName: driverName || "",
       plate: tripPlate,
       date: tripDate,
       recipientName: podForm.recipientName || "",
@@ -2412,6 +2421,16 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
         {repCode2 && (
           <p className="font-ui text-[11px] mt-1.5" style={{ color: repName2 ? C.teal : C.red }}>
             {repName2 ? tr(`✓ المندوب الآخر: ${repName2}`, `✓ Additional rep: ${repName2}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+          </p>
+        )}
+        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("كود السائق (اختياري)", "Driver code (optional)")}</h3>
+        <input type="text" placeholder={tr("اكتب كود السائق هنا", "Enter the driver's code here")}
+          value={driverCode} onChange={e => handleDriverCodeChange(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+        {driverCode && (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: driverName ? C.teal : C.red }}>
+            {driverName ? tr(`✓ السائق: ${driverName}`, `✓ Driver: ${driverName}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
           </p>
         )}
         <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("رقم المركبة", "Vehicle number")}</h3>
@@ -3901,14 +3920,18 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     setEditingId(null);
   }
 
-  const repOptions = useMemo(() =>
-    [...new Set((deliveries || []).map(d => d.repName || d.enteredBy).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [deliveries]);
+  const repOptions = useMemo(() => {
+    const map = new Map();
+    (deliveries || []).forEach(d => {
+      if (d.repCode) map.set(String(d.repCode), d.repName || String(d.repCode));
+    });
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [deliveries]);
 
   const filtered = useMemo(() => (deliveries || []).filter(d => {
     const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
     return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || (d.plate || "").toLowerCase().includes(q.toLowerCase()))
-      && (!repFilter || (d.repName || d.enteredBy) === repFilter)
+      && (!repFilter || String(d.repCode) === String(repFilter))
       && (!statusFilter || d.status === statusFilter)
       && (!dateFrom || dateOnly >= dateFrom)
       && (!dateTo || dateOnly <= dateTo);
@@ -3970,7 +3993,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
           <select value={repFilter} onChange={e => { setRepFilter(e.target.value); setPage(1); }}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
             <option value="">{tr("المناديب والسائقين", "Reps & drivers")}</option>
-            {repOptions.map(r => <option key={r} value={r}>{r}</option>)}
+            {repOptions.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
           </select>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
@@ -4428,6 +4451,30 @@ function logAudit(currentUser, action, details) {
 // أول مرة تلاقي الـ collection فاضية، بتهاجر البيانات أوتوماتيك من نظام
 // التخزين القديم (etronic_data/{key})، والنسخة القديمة بتفضل موجودة
 // كنسخة احتياطية ومبيتمسحش منها حاجة.
+// ذاكرة مؤقتة محلية (localStorage) للمجموعات اللي بتتحمّل مرة واحدة —
+// بتخلي التطبيق يقرأ من جهاز المستخدم نفسه بدل ما يكلّم Firestore تاني في
+// كل مرة يفتح فيها المتصفح، طول ما الكاش لسه صالح. الزرار اليدوي "تحديث"
+// بيتجاوز الكاش دايمًا ويجيب نسخة حقيقية من الخادم.
+const LOCAL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // صلاحية الكاش: 24 ساعة
+function readLocalCache(cacheKey) {
+  try {
+    const raw = localStorage.getItem("etronic_cache_" + cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.ts !== "number") return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+function writeLocalCache(cacheKey, data) {
+  try {
+    localStorage.setItem("etronic_cache_" + cacheKey, JSON.stringify({ data, ts: Date.now() }));
+  } catch (e) {
+    // فشل صامت — لو مساحة التخزين المحلي ممتلئة، مش لازم نكسر التطبيق بسببها
+  }
+}
+
 function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
   const [state, setState] = useState(initialFn());
   const [ready, setReady] = useState(false);
@@ -4445,8 +4492,10 @@ function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
       if (cancelled) return;
       if (!snap.empty || migratingRef.current) {
         console.log("[etronic] collection", key, "loaded", snap.docs.length, "docs");
-        setState(snap.docs.map(d => d.data()));
+        const docs = snap.docs.map(d => d.data());
+        setState(docs);
         setReady(true);
+        if (!live) writeLocalCache(key, docs);
         return;
       }
       migratingRef.current = true;
@@ -4473,6 +4522,20 @@ function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
         setReady(true);
       });
       return () => { cancelled = true; unsub(); };
+    }
+
+    // أول تحميل بس (refreshTick === 0): جرّب الذاكرة المؤقتة المحلية الأول
+    // قبل ما نكلّم الخادم خالص — لو لقينا كاش صالح، نستخدمه ونخلص من غير أي
+    // قراءة من Firestore إطلاقًا. الضغط على زرار "تحديث" (refreshTick > 0)
+    // بيتجاوز الكاش دايمًا ويجيب نسخة حقيقية.
+    if (refreshTick === 0) {
+      const cached = readLocalCache(key);
+      if (cached && Array.isArray(cached.data) && (Date.now() - cached.ts) < LOCAL_CACHE_TTL_MS) {
+        console.log("[etronic] collection", key, "loaded from local cache —", cached.data.length, "docs (no server read)");
+        setState(cached.data);
+        setReady(true);
+        return () => { cancelled = true; };
+      }
     }
     // قراءة لمرة واحدة بدل استماع مستمر — بتقلل استهلاك حصة Firestore
     // اليومية بشكل كبير جدًا للمجموعات اللي مش محتاجة تحديث لحظي (زي
@@ -4508,6 +4571,7 @@ function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
       ...changed.map(item => ({ type: "set", ref: colRef.doc(String(item[idField])), data: item })),
       ...removed.map(item => ({ type: "delete", ref: colRef.doc(String(item[idField])) })),
     ];
+    if (!live) writeLocalCache(key, next);
     if (ops.length === 0) { announceSaved(null); return; }
     commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
   }
@@ -4538,6 +4602,7 @@ function useFirestoreMap(key, initialFn, live = true) {
         snap.docs.forEach(d => { next[d.id] = d.data(); });
         setState(next);
         setReady(true);
+        if (!live) writeLocalCache(key, next);
         return;
       }
       migratingRef.current = true;
@@ -4560,6 +4625,16 @@ function useFirestoreMap(key, initialFn, live = true) {
         setReady(true);
       });
       return () => { cancelled = true; unsub(); };
+    }
+
+    if (refreshTick === 0) {
+      const cached = readLocalCache(key);
+      if (cached && cached.data && typeof cached.data === "object" && (Date.now() - cached.ts) < LOCAL_CACHE_TTL_MS) {
+        console.log("[etronic] map", key, "loaded from local cache —", Object.keys(cached.data).length, "entries (no server read)");
+        setState(cached.data);
+        setReady(true);
+        return () => { cancelled = true; };
+      }
     }
     colRef.get().then(handleSnap).catch((e) => {
       console.error("[etronic] map get() error for", key, e);
@@ -4586,6 +4661,7 @@ function useFirestoreMap(key, initialFn, live = true) {
       ...changedEntries.map(([k, v]) => ({ type: "set", ref: colRef.doc(String(k)), data: v })),
       ...removedKeys.map(k => ({ type: "delete", ref: colRef.doc(String(k)) })),
     ];
+    if (!live) writeLocalCache(key, next);
     if (ops.length === 0) { announceSaved(null); return; }
     commitOpsChunked(ops).then(() => announceSaved(null)).catch(err => announceSaved(err));
   }
