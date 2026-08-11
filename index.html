@@ -3927,6 +3927,11 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     });
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [deliveries]);
+  const repFilterName = useMemo(() => {
+    if (!repFilter) return "";
+    const match = repOptions.find(([code]) => code === repFilter);
+    return match ? match[1] : "";
+  }, [repFilter, repOptions]);
 
   const filtered = useMemo(() => (deliveries || []).filter(d => {
     const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
@@ -3990,11 +3995,16 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} placeholder={tr("إلى تاريخ", "To")}
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-          <select value={repFilter} onChange={e => { setRepFilter(e.target.value); setPage(1); }}
-            className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-            <option value="">{tr("المناديب والسائقين", "Reps & drivers")}</option>
-            {repOptions.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
-          </select>
+          <div className="flex-1 min-w-[160px]">
+            <input type="text" value={repFilter} onChange={e => { setRepFilter(e.target.value.trim()); setPage(1); }}
+              placeholder={tr("كود المندوب أو السائق", "Rep or driver code")}
+              className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            {repFilter && (
+              <p className="font-ui text-[11px] mt-1" style={{ color: repFilterName ? C.teal : C.red }}>
+                {repFilterName ? `✓ ${repFilterName}` : tr("⚠ لا يوجد مندوب أو سائق بهذا الكود", "⚠ No rep or driver with this code")}
+              </p>
+            )}
+          </div>
           <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
             className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
             <option value="">{tr("كل الحالات", "All statuses")}</option>
@@ -4268,6 +4278,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
         const totalOperationalCost = fuelCost + maintenanceCost;
         const costPerKm = totalDistance > 0 ? totalOperationalCost / totalDistance : 0;
+        const costPerTrip = uniqueTrips.size > 0 ? totalOperationalCost / uniqueTrips.size : 0;
 
         return {
           plate: v.plate,
@@ -4275,7 +4286,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           deliveredCount, undeliveredCount,
           totalDistance, totalLiters, kmPerLiter, literPer100km,
           fuelCost, maintenanceCost, maintenanceTypesSummary,
-          totalOperationalCost, costPerKm,
+          totalOperationalCost, costPerTrip, costPerKm,
         };
       });
   }, [vehicles, filteredDeliveries, perFillAll, maintenanceRecords, plateFilter, dateFrom, dateTo]);
@@ -4293,12 +4304,12 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
   function exportXlsx() {
     const headers = tr(
-      ["المركبة", "عدد الرحلات", "عملاء تم التسليم", "عملاء لم يتم التسليم", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة/كم"],
-      ["Vehicle", "Trips", "Delivered", "Undelivered", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost/km"]
+      ["المركبة", "عدد الرحلات", "عملاء تم التسليم", "عملاء لم يتم التسليم", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة الرحلة", "تكلفة/كم"],
+      ["Vehicle", "Trips", "Delivered", "Undelivered", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost per trip", "Cost/km"]
     );
     const rows = perVehicle.map(r => [
       r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
-      round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round2(r.costPerKm),
+      round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
     ]);
     exportTableToXlsx(tr("تقارير عامة", "General Reports"), headers, rows, tr("التقارير_العامة.xlsx", "general_reports.xlsx"));
   }
@@ -4306,12 +4317,12 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     exportTableToPdf(
       tr("تقارير عامة", "General Reports"),
       tr(
-        ["المركبة", "الرحلات", "تم التسليم", "لم يتم", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة/كم"],
-        ["Vehicle", "Trips", "Delivered", "Undelivered", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/km"]
+        ["المركبة", "الرحلات", "تم التسليم", "لم يتم", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة الرحلة", "تكلفة/كم"],
+        ["Vehicle", "Trips", "Delivered", "Undelivered", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/trip", "Cost/km"]
       ),
       perVehicle.map(r => [
         r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
-        round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round2(r.costPerKm),
+        round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
       ]),
       tr("التقارير_العامة.pdf", "general_reports.pdf")
     );
@@ -4374,6 +4385,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة الصيانة", "Maint. cost")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("أنواع الصيانة", "Maint. types")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("إجمالي التشغيل", "Total cost")}</th>
+                <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة الرحلة", "Cost per trip")}</th>
                 <th className="font-ui text-[11px] font-semibold text-right p-2.5" style={{ color: C.muted }}>{tr("تكلفة/كم", "Cost/km")}</th>
               </tr>
             </thead>
@@ -4392,6 +4404,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.red }}>{round1(r.maintenanceCost)}</td>
                   <td className="p-2.5 font-ui text-[11px]" style={{ color: C.muted }}>{r.maintenanceTypesSummary || "—"}</td>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{round1(r.totalOperationalCost)}</td>
+                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.amber }}>{r.costPerTrip ? round1(r.costPerTrip) : "—"}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.costPerKm ? round2(r.costPerKm) : "—"}</td>
                 </tr>
               ))}
