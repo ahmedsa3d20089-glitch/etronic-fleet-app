@@ -3947,23 +3947,25 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
 
   function exportXlsx() {
-    const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Notes"]);
+    const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Notes"]);
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.notes || ""];
+      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.repName2 || "", d.driverName || "", d.notes || ""];
     });
     exportTableToXlsx(tr("تقرير التسليمات", "Delivery Report"), headers, rows, tr("تقرير_التسليمات.xlsx", "delivery_report.xlsx"));
   }
   function exportPdf() {
     exportTableToPdf(
       tr("تقرير التسليمات", "Delivery report"),
-      tr(["التاريخ", "العميل", "الحالة", "المستلم", "المندوب", "ملاحظات"], ["Date", "Customer", "Status", "Recipient", "Rep", "Notes"]),
+      tr(["التاريخ", "العميل", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "ملاحظات"], ["Date", "Customer", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Notes"]),
       filtered.map(d => [
         d.date || (d.deliveredAt || "").slice(0, 10),
         d.customerName || "",
         d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered"),
         d.recipientName || "",
         d.repName || d.enteredBy || "",
+        d.repName2 || "",
+        d.driverName || "",
         d.notes || "",
       ]),
       tr("تقرير_التسليمات.pdf", "delivery_report.pdf")
@@ -4060,6 +4062,8 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
                         {d.plate ? ` · ${tr("المركبة", "Vehicle")}: ${d.plate}` : ""}
                         {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
                         {(d.repName || d.enteredBy) ? ` · ${tr("المندوب", "Rep")}: ${d.repName || d.enteredBy}` : ""}
+                        {d.repName2 ? ` · ${tr("مندوب آخر", "Additional rep")}: ${d.repName2}` : ""}
+                        {d.driverName ? ` · ${tr("السائق", "Driver")}: ${d.driverName}` : ""}
                         {d.notes ? ` · ${d.notes}` : ""}
                       </p>
                     </div>
