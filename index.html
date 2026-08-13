@@ -3953,17 +3953,17 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
 
   function exportXlsx() {
-    const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Notes"]);
+    const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "مرتجع", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Return", "Notes"]);
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.repName2 || "", d.driverName || "", d.notes || ""];
+      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.repName2 || "", d.driverName || "", d.returns || "", d.notes || ""];
     });
     exportTableToXlsx(tr("تقرير التسليمات", "Delivery Report"), headers, rows, tr("تقرير_التسليمات.xlsx", "delivery_report.xlsx"));
   }
   function exportPdf() {
     exportTableToPdf(
       tr("تقرير التسليمات", "Delivery report"),
-      tr(["التاريخ", "العميل", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "ملاحظات"], ["Date", "Customer", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Notes"]),
+      tr(["التاريخ", "العميل", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "مرتجع", "ملاحظات"], ["Date", "Customer", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Return", "Notes"]),
       filtered.map(d => [
         d.date || (d.deliveredAt || "").slice(0, 10),
         d.customerName || "",
@@ -3972,6 +3972,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
         d.repName || d.enteredBy || "",
         d.repName2 || "",
         d.driverName || "",
+        d.returns || "",
         d.notes || "",
       ]),
       tr("تقرير_التسليمات.pdf", "delivery_report.pdf")
@@ -4253,12 +4254,17 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
   const [repFilter, setRepFilter] = useState("");
 
   const inRange = (date) => (!dateFrom || (date || "") >= dateFrom) && (!dateTo || (date || "") <= dateTo);
+  const repFilterName = useMemo(() => {
+    if (!repFilter) return "";
+    const match = (employees || []).find(e => String(e.code) === repFilter);
+    return match ? match.name : "";
+  }, [repFilter, employees]);
 
   const filteredDeliveries = useMemo(() =>
     (deliveries || []).filter(d =>
       inRange(d.date || (d.deliveredAt || "").slice(0, 10)) &&
       (!plateFilter || d.plate === plateFilter) &&
-      (!repFilter || String(d.repCode) === String(repFilter))
+      (!repFilter || [d.repCode, d.repCode2, d.driverCode].map(String).includes(String(repFilter)))
     ),
     [deliveries, dateFrom, dateTo, plateFilter, repFilter]);
 
@@ -4360,11 +4366,16 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           <option value="">{tr("كل المركبات", "All vehicles")}</option>
           {(vehicles || []).map(v => <option key={v.plate} value={v.plate}>{v.plate}</option>)}
         </select>
-        <select value={repFilter} onChange={e => setRepFilter(e.target.value)}
-          className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }}>
-          <option value="">{tr("كل المندوبين", "All reps")}</option>
-          {(employees || []).map(e => <option key={e.code} value={e.code}>{e.name} ({e.code})</option>)}
-        </select>
+        <div className="flex-1 min-w-[160px]">
+          <input type="text" value={repFilter} onChange={e => setRepFilter(e.target.value.trim())}
+            placeholder={tr("كود السائق أو المندوب", "Driver or rep code")}
+            className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+          {repFilter && (
+            <p className="font-ui text-[11px] mt-1" style={{ color: repFilterName ? C.teal : C.red }}>
+              {repFilterName ? `✓ ${repFilterName}` : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-6">
