@@ -3943,7 +3943,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
     return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || (d.plate || "").toLowerCase().includes(q.toLowerCase()))
       && (!repFilter || String(d.repCode) === String(repFilter))
-      && (!statusFilter || d.status === statusFilter)
+      && (!statusFilter || (statusFilter === "returns" ? !!d.returns : d.status === statusFilter))
       && (!dateFrom || dateOnly >= dateFrom)
       && (!dateTo || dateOnly <= dateTo);
   }).sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || "")), [deliveries, q, repFilter, statusFilter, dateFrom, dateTo]);
@@ -3951,6 +3951,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const deliveredCount = filtered.filter(d => d.status === "تم التسليم").length;
   const notDeliveredCount = filtered.filter(d => d.status === "لم يتم التسليم").length;
+  const returnsCount = filtered.filter(d => d.returns).length;
 
   function exportXlsx() {
     const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "مرتجع", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Return", "Notes"]);
@@ -3958,23 +3959,34 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
       return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.repName2 || "", d.driverName || "", d.returns || "", d.notes || ""];
     });
+    rows.push([
+      tr("الإجمالي", "Total"), "", "", "",
+      tr(`تم التسليم: ${deliveredCount} — لم يتم: ${notDeliveredCount}`, `Delivered: ${deliveredCount} — Not delivered: ${notDeliveredCount}`),
+      "", "", "", "", tr(`عدد المرتجعات: ${returnsCount}`, `Returns: ${returnsCount}`), "",
+    ]);
     exportTableToXlsx(tr("تقرير التسليمات", "Delivery Report"), headers, rows, tr("تقرير_التسليمات.xlsx", "delivery_report.xlsx"));
   }
   function exportPdf() {
+    const rows = filtered.map(d => [
+      d.date || (d.deliveredAt || "").slice(0, 10),
+      d.customerName || "",
+      d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered"),
+      d.recipientName || "",
+      d.repName || d.enteredBy || "",
+      d.repName2 || "",
+      d.driverName || "",
+      d.returns || "",
+      d.notes || "",
+    ]);
+    rows.push([
+      tr("الإجمالي", "Total"), "",
+      tr(`تم: ${deliveredCount} — لم يتم: ${notDeliveredCount}`, `Delivered: ${deliveredCount} — Not: ${notDeliveredCount}`),
+      "", "", "", "", tr(`مرتجعات: ${returnsCount}`, `Returns: ${returnsCount}`), "",
+    ]);
     exportTableToPdf(
       tr("تقرير التسليمات", "Delivery report"),
       tr(["التاريخ", "العميل", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "مرتجع", "ملاحظات"], ["Date", "Customer", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Return", "Notes"]),
-      filtered.map(d => [
-        d.date || (d.deliveredAt || "").slice(0, 10),
-        d.customerName || "",
-        d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered"),
-        d.recipientName || "",
-        d.repName || d.enteredBy || "",
-        d.repName2 || "",
-        d.driverName || "",
-        d.returns || "",
-        d.notes || "",
-      ]),
+      rows,
       tr("تقرير_التسليمات.pdf", "delivery_report.pdf")
     );
   }
@@ -3988,6 +4000,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
         <KpiCard icon={Package} value={filtered.length} label={tr("إجمالي السجلات", "Total records")} color={C.teal} />
         <KpiCard icon={CheckCircle} value={deliveredCount} label={tr("تم التسليم", "Delivered")} color={C.teal} />
         <KpiCard icon={XCircle} value={notDeliveredCount} label={tr("لم يتم التسليم", "Not delivered")} color={C.red} />
+        <KpiCard icon={Package} value={returnsCount} label={tr("المرتجعات", "Returns")} color={returnsCount ? C.amber : C.muted} />
       </div>
 
       <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
@@ -4019,6 +4032,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
             <option value="">{tr("كل الحالات", "All statuses")}</option>
             <option value="تم التسليم">{tr("تم التسليم", "Delivered")}</option>
             <option value="لم يتم التسليم">{tr("لم يتم التسليم", "Not delivered")}</option>
+            <option value="returns">{tr("المرتجعات", "Returns")}</option>
           </select>
         </div>
       </div>
