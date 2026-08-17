@@ -4348,19 +4348,28 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
       r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
       round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
     ]);
+    rows.push([
+      tr("الإجمالي", "Total"), totals.trips, totals.delivered, totals.undelivered, round1(totals.distance), round1(totals.liters), "", "",
+      round1(totals.fuelCost), round1(totals.maintenanceCost), "", round1(totals.operationalCost), "", "",
+    ]);
     exportTableToXlsx(tr("تقارير عامة", "General Reports"), headers, rows, tr("التقارير_العامة.xlsx", "general_reports.xlsx"));
   }
   function exportPdf() {
+    const rows = perVehicle.map(r => [
+      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
+    ]);
+    rows.push([
+      tr("الإجمالي", "Total"), totals.trips, totals.delivered, totals.undelivered, round1(totals.distance), round1(totals.liters), "", "",
+      round1(totals.fuelCost), round1(totals.maintenanceCost), round1(totals.operationalCost), "", "",
+    ]);
     exportTableToPdf(
       tr("تقارير عامة", "General Reports"),
       tr(
         ["المركبة", "الرحلات", "تم التسليم", "لم يتم", "المسافة (كم)", "اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "إجمالي التشغيل", "تكلفة الرحلة", "تكلفة/كم"],
         ["Vehicle", "Trips", "Delivered", "Undelivered", "Distance (km)", "Liters", "Km/L", "L/100km", "Fuel cost", "Maint. cost", "Total cost", "Cost/trip", "Cost/km"]
       ),
-      perVehicle.map(r => [
-        r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
-        round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
-      ]),
+      rows,
       tr("التقارير_العامة.pdf", "general_reports.pdf")
     );
   }
