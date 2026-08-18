@@ -773,6 +773,13 @@ function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) 
 
   function addVehicle() {
     if (!form.plate) return;
+    // رقم اللوحة بيُستخدم كمفتاح فريد في vehicleByPlate بخط السير والوقود
+    // والصيانة — لو اتكرر، البحث هيرجع أول تطابق بس ويلخبط بين مركبتين.
+    const isDuplicate = vehicles.some(v => String(v.plate).trim() === String(form.plate).trim());
+    if (isDuplicate) {
+      alert(tr("رقم المركبة هذا مسجَّل بالفعل — استخدم رقمًا مختلفًا", "This plate number is already registered — use a different number"));
+      return;
+    }
     setVehicles([...vehicles, { ...form, id: Date.now() }]);
     setForm({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
   }
@@ -789,6 +796,11 @@ function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) 
     setEditForm(null);
   }
   function saveEdit() {
+    const isDuplicate = vehicles.some(v => v.id !== editingId && String(v.plate).trim() === String(editForm.plate).trim());
+    if (isDuplicate) {
+      alert(tr("رقم المركبة هذا مسجَّل بالفعل — استخدم رقمًا مختلفًا", "This plate number is already registered — use a different number"));
+      return;
+    }
     setVehicles(vehicles.map(v => v.id === editingId ? { ...editForm } : v));
     setEditingId(null);
     setEditForm(null);
@@ -888,6 +900,14 @@ function EmployeesTab({ employees, setEmployees, refreshEmployees, isAdmin, lang
 
   function addEmployee() {
     if (!form.name || !form.code) return;
+    // كود الموظف بيُستخدم كمفتاح فريد في البحث عن المندوب/السائق في خط
+    // السير والوقود وغيرهم (repByCode/driverByCode) — لو اتكرر، أي دالة
+    // بحث بترجع أول تطابق بس هتلخبط بين موظفين مختلفين بنفس الكود.
+    const isDuplicate = employees.some(e => String(e.code) === String(form.code));
+    if (isDuplicate) {
+      alert(tr("هذا الكود مستخدم بالفعل لموظف آخر — استخدم كودًا مختلفًا", "This code is already used by another employee — use a different code"));
+      return;
+    }
     setEmployees([...employees, { ...form, id: Date.now() }]);
     setForm({ name: "", code: "", position: "", department: "", phone: "" });
     setPage(1);
@@ -905,6 +925,11 @@ function EmployeesTab({ employees, setEmployees, refreshEmployees, isAdmin, lang
     setEditForm(null);
   }
   function saveEdit() {
+    const isDuplicate = employees.some(e => e.id !== editingId && String(e.code) === String(editForm.code));
+    if (isDuplicate) {
+      alert(tr("هذا الكود مستخدم بالفعل لموظف آخر — استخدم كودًا مختلفًا", "This code is already used by another employee — use a different code"));
+      return;
+    }
     setEmployees(employees.map(e => e.id === editingId ? { ...editForm } : e));
     setEditingId(null);
     setEditForm(null);
@@ -2045,7 +2070,8 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     "جراچ": { ar: "جراچ", en: "Garage / workshop" },
     "أخرى": { ar: "أخرى", en: "Other" },
   };
-  const OIL_INTERVAL_KM = 2000;
+  // OIL_INTERVAL_KM (2000) مُعرَّف مرة واحدة فقط بشكل عام بجانب computeOilAlerts —
+  // نستخدمه من هناك عشان النص المعروض هنا ومنطق التنبيه الفعلي يتفقوا دايمًا على نفس القيمة.
   const emptyForm = { plate: "", date: "", type: TYPES[0], cost: "", description: "", nextDue: "", odometer: "" };
   const [form, setForm] = useState(emptyForm);
   const [page, setPage] = useState(1);
@@ -2105,7 +2131,14 @@ function MaintenanceTab({ records, setRecords, fuelRecords, vehicles, odometerLo
     // للأبد حتى لو المستخدم فعليًا غيّر الزيت.
     if (form.type === "تغيير الزيت" && !form.odometer) return;
     if (editingId !== null) {
-      setRecords(records.map(r => (r.id === editingId ? { ...r, ...form } : r)));
+      const original = records.find(r => r.id === editingId);
+      // منع أي مستخدم غير مسؤول من تغيير نوع سجل "تغيير الزيت" لنوع آخر عبر
+      // التعديل — لأن ده كان بيسمح بالالتفاف حول قيد "الحذف مسموح فقط
+      // للمسؤول" الخاص بسجلات تغيير الزيت (تغيير النوع الأول، ثم الحذف).
+      const safeForm = (original && original.type === "تغيير الزيت" && !isAdmin)
+        ? { ...form, type: "تغيير الزيت" }
+        : form;
+      setRecords(records.map(r => (r.id === editingId ? { ...r, ...safeForm } : r)));
       setEditingId(null);
     } else {
       setRecords([...records, { id: Date.now(), ...form }]);
@@ -2460,12 +2493,24 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
   // ومفيش أي كتابة فعلية لو المحتوى متطابق مع المحفوظ أصلًا.
   React.useEffect(() => {
     if ((!repName && !driverName) || !vehicleByPlate(tripPlate) || stops.length === 0) return;
-    const payload = { stops, repCode, repCode2, driverCode, tripPlate, routeDate, updatedAt: new Date().toISOString() };
+    const content = { stops, repCode, repCode2, driverCode, tripPlate, routeDate };
     setSavedRoutes(prev => {
       const next = { ...(prev || {}) };
-      if (repCode) next[String(repCode).trim()] = payload;
-      if (driverCode) next[String(driverCode).trim()] = payload;
-      return next;
+      let changed = false;
+      [repCode, driverCode].forEach(code => {
+        if (!code) return;
+        const key = String(code).trim();
+        const existing = next[key];
+        // نقارن المحتوى الفعلي بس (من غير updatedAt) مع المحفوظ أصلًا — لو
+        // متطابق تمامًا، منسيبش المفتاح ده زي ما هو من غير كتابة، عشان
+        // updatedAt المتغيّر كل مرة ميخليش الفرق الوهمي ده يتسجّل كتغيير
+        // حقيقي في Firestore (كان بيسبب كتابة كل مرة يُفتح فيها خط سير محفوظ).
+        const existingContent = existing ? { stops: existing.stops, repCode: existing.repCode, repCode2: existing.repCode2, driverCode: existing.driverCode, tripPlate: existing.tripPlate, routeDate: existing.routeDate } : null;
+        if (existingContent && JSON.stringify(existingContent) === JSON.stringify(content)) return;
+        next[key] = { ...content, updatedAt: new Date().toISOString() };
+        changed = true;
+      });
+      return changed ? next : prev;
     });
   }, [stops, repCode, repCode2, driverCode, tripPlate, routeDate, repName, driverName]);
   function handlePodPhoto(e) {
@@ -3321,7 +3366,7 @@ function computeVehicleStats(plate, fuelRecords, odometerLogs, deliveries) {
   const totalDistance = analytics.rows.reduce((s, r) => s + (r.km > 0 ? r.km : 0), 0);
   const costPerKm = totalDistance > 0 ? totalCost / totalDistance : 0;
 
-  const deliveryCount = (deliveries || []).filter(d => d.status === "تم التسليم").length;
+  const deliveryCount = (deliveries || []).filter(d => d.plate === plate && d.status === "تم التسليم").length;
   const costPerDelivery = deliveryCount > 0 ? totalCost / deliveryCount : 0;
 
   // المتوسط اليومي على مدار الشهر الحالي
@@ -5156,8 +5201,8 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [customerLocations, setCustomerLocations, , refreshCustomerLocations] = useFirestoreMap("etronic_customer_locations", () => ({}), false);
   const [accounts, setAccounts, , refreshAccounts] = useFirestoreCollection("etronic_accounts", () => [], "email", false);
   const [auditLog, , , refreshAuditLog] = useFirestoreCollection("etronic_audit_log", () => [], "id", false);
-  const [deliveries, setDeliveries] = useFirestoreCollection("etronic_deliveries", () => []);
-  const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady;
+  const [deliveries, setDeliveries, deliveriesReady] = useFirestoreCollection("etronic_deliveries", () => []);
+  const dataReady = fuelReady && maintenanceReady && customersReady && employeesReady && vehiclesReady && odometerReady && deliveriesReady;
 
   // إشعارات التنبيه — تُحسب مرة واحدة هنا على مستوى التطبيق كله (وليس فقط
   // داخل التبويب المفتوح حاليًا)، حتى تُطلَق حتى لو كان المستخدم في شاشة أخرى.
