@@ -4193,7 +4193,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
     const headers = tr(["التاريخ", "الوقت", "العميل", "الكود", "الحالة", "المستلم", "المندوب", "مندوب آخر", "السائق", "مرتجع", "ملاحظات"], ["Date", "Time", "Customer", "Code", "Status", "Recipient", "Rep", "Additional rep", "Driver", "Return", "Notes"]);
     const rows = filtered.map(d => {
       const statusText = d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered");
-      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || d.enteredBy || "", d.repName2 || "", d.driverName || "", d.returns || "", d.notes || ""];
+      return [d.date || (d.deliveredAt || "").slice(0, 10), (d.deliveredAt || "").replace("T", " ").slice(11, 16), d.customerName || "", d.customerCode || "", statusText, d.recipientName || "", d.repName || "", d.repName2 || "", d.driverName || "", d.returns || "", d.notes || ""];
     });
     rows.push([
       tr("الإجمالي", "Total"), "", "", "",
@@ -4208,7 +4208,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
       d.customerName || "",
       d.status === "تم التسليم" ? tr("تم التسليم", "Delivered") : tr("لم يتم التسليم", "Not delivered"),
       d.recipientName || "",
-      d.repName || d.enteredBy || "",
+      d.repName || "",
       d.repName2 || "",
       d.driverName || "",
       d.returns || "",
@@ -4364,7 +4364,9 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
                         {d.date || (d.deliveredAt || "").slice(0, 10)}
                         {d.plate ? ` · ${tr("المركبة", "Vehicle")}: ${d.plate}` : ""}
                         {d.recipientName ? ` · ${tr("المستلم", "Recipient")}: ${d.recipientName}` : ""}
-                        {(d.repName || d.enteredBy) ? ` · ${tr("المندوب", "Rep")}: ${d.repName || d.enteredBy}` : ""}
+                        {/* خانة المندوب تعتمد فقط على repName الفعلي المرتبط بالتسليم — من غير أي fallback
+                            لإيميل/اسم المستخدم الحالي (enteredBy)، عشان في حالة سائق بدون مندوب تفضل فارغة صح. */}
+                        {d.repName ? ` · ${tr("المندوب", "Rep")}: ${d.repName}` : ""}
                         {d.repName2 ? ` · ${tr("مندوب آخر", "Additional rep")}: ${d.repName2}` : ""}
                         {d.driverName ? ` · ${tr("السائق", "Driver")}: ${d.driverName}` : ""}
                         {d.notes ? ` · ${d.notes}` : ""}
