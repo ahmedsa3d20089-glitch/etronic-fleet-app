@@ -4079,7 +4079,7 @@ function ReportsTab({ fuelRecords, odometerLogs, vehicles, deliveries, lang }) {
   );
 }
 
-function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
+function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [repFilter, setRepFilter] = useState("");
@@ -4090,7 +4090,13 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const [page, setPage] = useState(1);
   const [viewPhoto, setViewPhoto] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ status: "", plate: "", date: "", recipientName: "", notes: "" });
+  const [editForm, setEditForm] = useState({ status: "", plate: "", date: "", recipientName: "", notes: "", repCode: "", repName: "", repCode2: "", repName2: "", driverCode: "", driverName: "" });
+
+  // بحث عن موظف بكوده — نفس المنطق المستخدم في تبويب خط السير، عشان اسم
+  // السائق/المندوب يظهر ويتحدَّث صح لما يتغيّر الكود في نافذة التعديل.
+  function repByCode(code) {
+    return (employees || []).find(emp => String(emp.code) === String(code).trim());
+  }
 
   function removeDelivery(id) {
     if (!confirm(tr("هل أنت متأكد من حذف سجل التسليم هذا؟ هذا الإجراء نهائي.", "Are you sure you want to delete this delivery record? This cannot be undone."))) return;
@@ -4105,6 +4111,12 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
       recipientName: d.recipientName || "",
       returns: d.returns || "",
       notes: d.notes || "",
+      repCode: d.repCode || "",
+      repName: d.repName || "",
+      repCode2: d.repCode2 || "",
+      repName2: d.repName2 || "",
+      driverCode: d.driverCode || "",
+      driverName: d.driverName || "",
     });
   }
   function cancelEditDelivery() {
@@ -4113,6 +4125,20 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   function saveEditDelivery(id) {
     setDeliveries((deliveries || []).map(d => (d.id === id ? { ...d, ...editForm } : d)));
     setEditingId(null);
+  }
+  // كل حقل (السائق / المندوب الأساسي / المندوب الآخر) بيتحدَّث لوحده تمامًا —
+  // تغيير كود واحد بيحدِّث اسمه بس، من غير ما يمس أو يصفّر بيانات الحقلين التانيين.
+  function handleEditDriverCodeChange(code) {
+    const match = repByCode(code);
+    setEditForm(f => ({ ...f, driverCode: code, driverName: match ? match.name : "" }));
+  }
+  function handleEditRepCodeChange(code) {
+    const match = repByCode(code);
+    setEditForm(f => ({ ...f, repCode: code, repName: match ? match.name : "" }));
+  }
+  function handleEditRepCode2Change(code) {
+    const match = repByCode(code);
+    setEditForm(f => ({ ...f, repCode2: code, repName2: match ? match.name : "" }));
   }
 
   const repOptions = useMemo(() => {
@@ -4283,6 +4309,35 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
                         className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${editForm.returns ? C.red + "66" : C.border}`, color: C.text }} />
                       <input type="text" placeholder={tr("ملاحظات", "Notes")} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
                         className="rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                      <div>
+                        <input type="text" placeholder={tr("كود السائق", "Driver code")} value={editForm.driverCode} onChange={e => handleEditDriverCodeChange(e.target.value)}
+                          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${editForm.driverCode && !editForm.driverName ? C.red + "66" : C.border}`, color: C.text }} />
+                        {editForm.driverCode && (
+                          <p className="font-ui text-[11px] mt-1" style={{ color: editForm.driverName ? C.teal : C.red }}>
+                            {editForm.driverName ? `✓ ${editForm.driverName}` : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <input type="text" placeholder={tr("كود المندوب الأساسي", "Primary rep code")} value={editForm.repCode} onChange={e => handleEditRepCodeChange(e.target.value)}
+                          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${editForm.repCode && !editForm.repName ? C.red + "66" : C.border}`, color: C.text }} />
+                        {editForm.repCode && (
+                          <p className="font-ui text-[11px] mt-1" style={{ color: editForm.repName ? C.teal : C.red }}>
+                            {editForm.repName ? `✓ ${editForm.repName}` : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <input type="text" placeholder={tr("كود المندوب الآخر", "Additional rep code")} value={editForm.repCode2} onChange={e => handleEditRepCode2Change(e.target.value)}
+                          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${editForm.repCode2 && !editForm.repName2 ? C.red + "66" : C.border}`, color: C.text }} />
+                        {editForm.repCode2 && (
+                          <p className="font-ui text-[11px] mt-1" style={{ color: editForm.repName2 ? C.teal : C.red }}>
+                            {editForm.repName2 ? `✓ ${editForm.repName2}` : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <button onClick={() => saveEditDelivery(d.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-ui text-xs font-semibold" style={{ background: `${C.amber}22`, color: C.amber }}>
@@ -5285,7 +5340,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                 : tab === "reports"
                   ? { fuelRecords, odometerLogs, vehicles, deliveries, lang }
                   : tab === "deliveries"
-                    ? { deliveries, setDeliveries, isAdmin, lang }
+                    ? { deliveries, setDeliveries, employees, isAdmin, lang }
                     : tab === "generalReports"
                     ? { vehicles, fuelRecords, maintenanceRecords, deliveries, employees, lang }
                     : tab === "settings"
