@@ -2306,7 +2306,7 @@ function twoOptImprove(points) {
   return route;
 }
 
-function RouteTab({ stops, setStops, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser, lang }) {
+function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [sorting, setSorting] = useState(false);
@@ -2426,6 +2426,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
     const match = repByCode(code);
     setRepCode(code);
     setRepName(match ? match.name : "");
+    if (match) openRouteForCode(code);
   }
   function handleRepCode2Change(code) {
     const match = repByCode(code);
@@ -2436,7 +2437,37 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
     const match = repByCode(code);
     setDriverCode(code);
     setDriverName(match ? match.name : "");
+    if (match) openRouteForCode(code);
   }
+  // استرجاع وفتح خط السير المرتبط بكود (سائق أو مندوب أساسي) تلقائيًا —
+  // بعد التأكد إن الكود صحيح ومسجَّل في قاعدة بيانات الموظفين (repByCode
+  // أعلاه). ميفتحش فوق خط سير قيد الإعداد فعليًا (فيه محطات مُضافة) عشان
+  // ميمسحش شغل المستخدم الحالي بالغلط.
+  function openRouteForCode(code) {
+    const key = String(code).trim();
+    const saved = (savedRoutes || {})[key];
+    if (!saved || stops.length > 0) return;
+    setStops(saved.stops || []);
+    if (saved.repCode) { setRepCode(saved.repCode); setRepName((repByCode(saved.repCode) || {}).name || ""); }
+    if (saved.repCode2) { setRepCode2(saved.repCode2); setRepName2((repByCode(saved.repCode2) || {}).name || ""); }
+    if (saved.driverCode) { setDriverCode(saved.driverCode); setDriverName((repByCode(saved.driverCode) || {}).name || ""); }
+    if (saved.tripPlate) setTripPlate(saved.tripPlate);
+    if (saved.routeDate) setRouteDate(saved.routeDate);
+  }
+  // حفظ تلقائي لخط السير الحالي تحت كود المندوب الأساسي وكود السائق معًا —
+  // عشان أي واحد فيهم لاحقًا يقدر يسترجع نفس الرحلة (متطلب رقم 2). بيشتغل
+  // بس لما الكودين والمركبة كلهم صحيحين (نفس شرط فتح خط السير أصلًا)،
+  // ومفيش أي كتابة فعلية لو المحتوى متطابق مع المحفوظ أصلًا.
+  React.useEffect(() => {
+    if ((!repName && !driverName) || !vehicleByPlate(tripPlate) || stops.length === 0) return;
+    const payload = { stops, repCode, repCode2, driverCode, tripPlate, routeDate, updatedAt: new Date().toISOString() };
+    setSavedRoutes(prev => {
+      const next = { ...(prev || {}) };
+      if (repCode) next[String(repCode).trim()] = payload;
+      if (driverCode) next[String(driverCode).trim()] = payload;
+      return next;
+    });
+  }, [stops, repCode, repCode2, driverCode, tripPlate, routeDate, repName, driverName]);
   function handlePodPhoto(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -2447,8 +2478,16 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       alert(tr('اختر "تم التسليم" أو "لم يتم التسليم" أولًا', 'Choose either "Delivered" or "Not delivered" first'));
       return;
     }
-    if (!repCode || !repName) {
-      alert(tr("كود المندوب إلزامي — أدخله بجانب زر \"رتب حسب الموقع\" أعلاه قبل تسجيل أي عملية تسليم", "Rep code is required — enter it next to the \"Sort by location\" button above before recording any delivery"));
+    if (!repCode && !driverCode) {
+      alert(tr("لازم تدخل كود المندوب أو كود السائق (واحد منهم على الأقل) قبل تسجيل أي عملية تسليم", "You must enter either a rep code or a driver code (at least one) before recording any delivery"));
+      return;
+    }
+    if (repCode && !repName) {
+      alert(tr("كود المندوب المُدخل غير صحيح — تأكد منه أو استخدم كود السائق بدلًا منه", "The rep code you entered is invalid — check it, or use the driver code instead"));
+      return;
+    }
+    if (driverCode && !driverName) {
+      alert(tr("كود السائق المُدخل غير صحيح — تأكد منه أو استخدم كود المندوب بدلًا منه", "The driver code you entered is invalid — check it, or use the rep code instead"));
       return;
     }
     if (!tripPlate || !vehicleByPlate(tripPlate)) {
@@ -2494,19 +2533,38 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
       <h2 className="font-ui font-extrabold text-xl mb-1" style={{ color: C.text }}>{tr("خط السير", "Route")}</h2>
       <p className="font-ui text-xs mb-5" style={{ color: C.muted }}>{tr("أضف العملاء الذين ستزورهم — يعتمد الترتيب على الموقع GPS الفعلي إن وُجد، ويعود إلى الترتيب حسب المنطقة إن لم يوجد", "Add the customers you'll visit — ordering relies on actual saved GPS location, falling back to territory-based ordering when not saved")}</p>
 
-      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${repName ? C.border : C.red}` }}>
-        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("كود المندوب", "Rep code")}</h3>
-        <input type="text" placeholder={tr("اكتب كود المندوب هنا *", "Enter rep code here *")}
-          value={repCode} onChange={e => handleRepCodeChange(e.target.value)}
+      <div className="rounded-2xl p-4 mb-6" style={{ background: C.surface, border: `1px solid ${(driverName || repName) ? C.border : C.red}` }}>
+        <h3 className="font-ui font-bold text-sm mb-3" style={{ color: C.text }}>{tr("كود السائق", "Driver code")}</h3>
+        <input type="text" placeholder={tr("اكتب كود السائق هنا", "Enter driver code here")}
+          value={driverCode} onChange={e => handleDriverCodeChange(e.target.value)}
           className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
-          style={{ background: C.surface2, border: `1px solid ${!repCode ? C.red + "66" : C.border}`, color: C.text }} />
-        {repCode ? (
-          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName ? C.teal : C.red }}>
-            {repName ? tr(`✓ المندوب: ${repName}`, `✓ Rep: ${repName}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+          style={{ background: C.surface2, border: `1px solid ${driverCode && !driverName ? C.red + "66" : C.border}`, color: C.text }} />
+        {driverCode ? (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: driverName ? C.teal : C.red }}>
+            {driverName ? tr(`✓ السائق: ${driverName} — تم فتح خط سيره`, `✓ Driver: ${driverName} — their route has been opened`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
           </p>
         ) : (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: C.muted }}>
+            {tr("أدخل كود سائق صحيح لفتح خط سيره مباشرة — أو استخدم كود المندوب بالأسفل بدلًا منه", "Enter a valid driver code to open their route directly — or use the rep code below instead")}
+          </p>
+        )}
+        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("كود المندوب الأساسي", "Primary rep code")}</h3>
+        <input type="text" placeholder={tr("اكتب كود المندوب هنا", "Enter rep code here")}
+          value={repCode} onChange={e => handleRepCodeChange(e.target.value)}
+          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
+          style={{ background: C.surface2, border: `1px solid ${repCode && !repName ? C.red + "66" : C.border}`, color: C.text }} />
+        {repCode ? (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: repName ? C.teal : C.red }}>
+            {repName ? tr(`✓ المندوب: ${repName} — تم فتح خط سيره`, `✓ Rep: ${repName} — their route has been opened`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
+          </p>
+        ) : (
+          <p className="font-ui text-[11px] mt-1.5" style={{ color: C.muted }}>
+            {tr("أدخل كود مندوب صحيح لفتح خط سيره مباشرة — أو استخدم كود السائق بالأعلى بدلًا منه", "Enter a valid rep code to open their route directly — or use the driver code above instead")}
+          </p>
+        )}
+        {!driverName && !repName && (
           <p className="font-ui text-[11px] mt-1.5" style={{ color: C.red }}>
-            {tr("يجب إدخال كود المندوب الصحيح أولًا لاستخدام خط السير", "You must enter a valid rep code first to use the route")}
+            {tr("يجب إدخال كود سائق صحيح أو كود مندوب صحيح (واحد منهم على الأقل) لاستخدام خط السير", "You must enter a valid driver code or a valid rep code (at least one) to use the route")}
           </p>
         )}
         <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("مندوب آخر (اختياري)", "Additional rep (optional)")}</h3>
@@ -2517,16 +2575,6 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
         {repCode2 && (
           <p className="font-ui text-[11px] mt-1.5" style={{ color: repName2 ? C.teal : C.red }}>
             {repName2 ? tr(`✓ المندوب الآخر: ${repName2}`, `✓ Additional rep: ${repName2}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
-          </p>
-        )}
-        <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("كود السائق (اختياري)", "Driver code (optional)")}</h3>
-        <input type="text" placeholder={tr("اكتب كود السائق هنا", "Enter the driver's code here")}
-          value={driverCode} onChange={e => handleDriverCodeChange(e.target.value)}
-          className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none"
-          style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
-        {driverCode && (
-          <p className="font-ui text-[11px] mt-1.5" style={{ color: driverName ? C.teal : C.red }}>
-            {driverName ? tr(`✓ السائق: ${driverName}`, `✓ Driver: ${driverName}`) : tr("⚠ لا يوجد موظف بهذا الكود", "⚠ No employee with this code")}
           </p>
         )}
         <h3 className="font-ui font-bold text-sm mb-3 mt-4" style={{ color: C.text }}>{tr("رقم المركبة", "Vehicle number")}</h3>
@@ -2552,8 +2600,8 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
         </p>
       </div>
 
-      {!repName || !vehicleByPlate(tripPlate) ? (
-        <EmptyState text={tr("خط السير مقفل حتى يتم إدخال كود مندوب صحيح ورقم مركبة صحيح أعلاه.", "The route is locked until you enter a valid rep code and vehicle number above.")} />
+      {(!driverName && !repName) || !vehicleByPlate(tripPlate) ? (
+        <EmptyState text={tr("خط السير مقفل حتى يتم إدخال كود سائق صحيح أو كود مندوب صحيح (واحد منهم على الأقل)، ورقم مركبة صحيح، أعلاه.", "The route is locked until you enter a valid driver code or a valid rep code (at least one), and a valid vehicle number, above.")} />
       ) : (
         <>
       <div className="flex flex-wrap gap-3 mb-6">
@@ -2681,7 +2729,7 @@ function RouteTab({ stops, setStops, customerLocations, customers, employees, ve
                       {tr("سيُسجَّل الوقت والتاريخ تلقائيًا باسم:", "Date and time will be recorded automatically under:")} {currentUser?.email}
                     </p>
 
-                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status || !repName}
+                    <button onClick={() => savePod(s)} disabled={savingPod || !podForm.status || (!repName && !driverName)}
                       className="w-full px-3 py-2.5 rounded-lg font-ui text-sm font-bold disabled:opacity-50" style={{ background: C.amber, color: "#0B0E13" }}>
                       {savingPod ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ سجل التسليم", "Save delivery record")}
                     </button>
@@ -5065,6 +5113,10 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
   const [fuelRecords, setFuelRecords, fuelReady] = useFirestoreCollection("etronic_fuel", () => []);
   const [maintenanceRecords, setMaintenanceRecords, maintenanceReady] = useFirestoreCollection("etronic_maintenance", () => []);
   const [routeStops, setRouteStops] = useState([]);
+  // خط سير محفوظ لكل كود (مندوب أو سائق) — عشان أول ما حد يكتب كوده يقدر
+  // النظام يجيب آخر خط سير مرتبط بيه ويفتحه تلقائيًا، بدل ما يبدأ من صفر
+  // كل مرة. نفس فكرة useFirestoreMap المستخدمة لمواقع العملاء بالظبط.
+  const [savedRoutes, setSavedRoutes] = useFirestoreMap("etronic_saved_routes", () => ({}));
   const [customers, setCustomers, customersReady, refreshCustomers] = useFirestoreCollection("etronic_customers", () => CUSTOMERS.map((c, i) => ({ ...c, id: i })), "id", false);
   const [employees, setEmployees, employeesReady, refreshEmployees] = useFirestoreCollection("etronic_employees", () => EMPLOYEES.map((e, i) => ({ ...e, id: i })), "id", false);
   const [vehicles, setVehicles, vehiclesReady, refreshVehicles] = useFirestoreCollection("etronic_vehicles", () => VEHICLES.map((v, i) => ({ plate: v.plate, model: "", status: "نشطة", id: i })), "id", false);
@@ -5144,7 +5196,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
     : tab === "maintenance"
       ? { records: maintenanceRecords, setRecords: setMaintenanceRecords, fuelRecords, vehicles, odometerLogs, isAdmin, lang }
       : tab === "route"
-        ? { stops: routeStops, setStops: setRouteStops, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser: user, lang }
+        ? { stops: routeStops, setStops: setRouteStops, savedRoutes, setSavedRoutes, customerLocations, customers, employees, vehicles, deliveries, setDeliveries, currentUser: user, lang }
         : tab === "customers"
           ? { customers, setCustomers, customerLocations, setCustomerLocations, refreshCustomers, refreshCustomerLocations, isAdmin, lang }
           : tab === "employees"
