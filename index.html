@@ -4038,6 +4038,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const [q, setQ] = useState("");
   const [repFilter, setRepFilter] = useState("");
+  const [driverFilter, setDriverFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -4072,7 +4073,10 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
   const repOptions = useMemo(() => {
     const map = new Map();
     (deliveries || []).forEach(d => {
+      // كود المندوب قد يكون مسجلًا في repCode (المندوب الأساسي) أو repCode2 (مندوب آخر) —
+      // نجمع الاثنين عشان اسم المندوب يظهر صح مهما كان الحقل اللي اتسجل فيه.
       if (d.repCode) map.set(String(d.repCode), d.repName || String(d.repCode));
+      if (d.repCode2) map.set(String(d.repCode2), d.repName2 || String(d.repCode2));
     });
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [deliveries]);
@@ -4082,14 +4086,32 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
     return match ? match[1] : "";
   }, [repFilter, repOptions]);
 
+  const driverOptions = useMemo(() => {
+    const map = new Map();
+    (deliveries || []).forEach(d => {
+      if (d.driverCode) map.set(String(d.driverCode), d.driverName || String(d.driverCode));
+    });
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [deliveries]);
+  const driverFilterName = useMemo(() => {
+    if (!driverFilter) return "";
+    const match = driverOptions.find(([code]) => code === driverFilter);
+    return match ? match[1] : "";
+  }, [driverFilter, driverOptions]);
+
   const filtered = useMemo(() => (deliveries || []).filter(d => {
     const dateOnly = d.date || (d.deliveredAt || "").slice(0, 10);
+    // كود المندوب: يطابق سواء كان مسجلًا كمندوب أساسي (repCode) أو مندوب آخر (repCode2).
+    const matchesRep = !repFilter || [d.repCode, d.repCode2].map(String).includes(String(repFilter));
+    // كود السائق: يطابق حقل السائق فقط (driverCode) — مستقل تمامًا عن كود المندوب.
+    const matchesDriver = !driverFilter || String(d.driverCode) === String(driverFilter);
     return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || (d.plate || "").toLowerCase().includes(q.toLowerCase()))
-      && (!repFilter || String(d.repCode) === String(repFilter))
+      && matchesRep
+      && matchesDriver
       && (!statusFilter || (statusFilter === "returns" ? !!d.returns : d.status === statusFilter))
       && (!dateFrom || dateOnly >= dateFrom)
       && (!dateTo || dateOnly <= dateTo);
-  }).sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || "")), [deliveries, q, repFilter, statusFilter, dateFrom, dateTo]);
+  }).sort((a, b) => (b.deliveredAt || "").localeCompare(a.deliveredAt || "")), [deliveries, q, repFilter, driverFilter, statusFilter, dateFrom, dateTo]);
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const deliveredCount = filtered.filter(d => d.status === "تم التسليم").length;
@@ -4162,11 +4184,21 @@ function DeliveryReportsTab({ deliveries, setDeliveries, isAdmin, lang }) {
             className="flex-1 rounded-lg px-2 py-2 font-ui text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
           <div className="flex-1 min-w-[160px]">
             <input type="text" value={repFilter} onChange={e => { setRepFilter(e.target.value.trim()); setPage(1); }}
-              placeholder={tr("كود المندوب أو السائق", "Rep or driver code")}
+              placeholder={tr("كود المندوب", "Rep code")}
               className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
             {repFilter && (
               <p className="font-ui text-[11px] mt-1" style={{ color: repFilterName ? C.teal : C.red }}>
-                {repFilterName ? `✓ ${repFilterName}` : tr("⚠ لا يوجد مندوب أو سائق بهذا الكود", "⚠ No rep or driver with this code")}
+                {repFilterName ? `✓ ${repFilterName}` : tr("⚠ لا يوجد مندوب بهذا الكود", "⚠ No rep with this code")}
+              </p>
+            )}
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <input type="text" value={driverFilter} onChange={e => { setDriverFilter(e.target.value.trim()); setPage(1); }}
+              placeholder={tr("كود السائق", "Driver code")}
+              className="w-full rounded-lg px-2 py-2 font-mono text-xs outline-none" style={{ background: C.surface2, border: `1px solid ${C.border}`, color: C.text }} />
+            {driverFilter && (
+              <p className="font-ui text-[11px] mt-1" style={{ color: driverFilterName ? C.teal : C.red }}>
+                {driverFilterName ? `✓ ${driverFilterName}` : tr("⚠ لا يوجد سائق بهذا الكود", "⚠ No driver with this code")}
               </p>
             )}
           </div>
