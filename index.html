@@ -525,6 +525,71 @@ function FleetComparisonChart({ data, unit, seriesLabels }) {
   );
 }
 
+// شارت خطي بسيط (Line Chart): نقطة لكل مركبة متصلة بخط، مع Tooltip
+// عند الوقوف/اللمس فوق أي نقطة. نفس أسلوب FleetChart بالظبط (ألوان C،
+// حركة دخول، دعم اللمس) عشان يتناسق شكله مع باقي شارتات التطبيق.
+function LineChart({ data, unit, color }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [grown, setGrown] = useState(false);
+  React.useEffect(() => {
+    setGrown(false);
+    const t = setTimeout(() => setGrown(true), 60);
+    return () => clearTimeout(t);
+  }, [data.map(d => d.label + d.value).join(",")]);
+
+  const max = Math.max(...data.map(d => d.value), 1);
+  const stepX = 60, gap = 30, chartHeight = 140, topPad = 30, bottomPad = 22;
+  const svgWidth = Math.max((data.length - 1) * stepX + gap * 2, 260);
+  const lineColor = color || C.teal;
+
+  const points = data.map((d, i) => ({
+    x: gap + i * stepX,
+    y: topPad + chartHeight - (d.value / max) * chartHeight,
+    ...d,
+  }));
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${grown ? p.y : topPad + chartHeight}`).join(" ");
+
+  return (
+    <div>
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${svgWidth} ${chartHeight + topPad + bottomPad}`} width="100%" height={chartHeight + topPad + bottomPad} style={{ minWidth: svgWidth, display: "block" }}>
+          {[0, 0.25, 0.5, 0.75, 1].map(f => (
+            <line key={f} x1={0} x2={svgWidth} y1={topPad + chartHeight * (1 - f)} y2={topPad + chartHeight * (1 - f)}
+              stroke={C.border} strokeWidth={1} strokeDasharray="3,3" />
+          ))}
+          <path d={pathD} fill="none" stroke={lineColor} strokeWidth={2}
+            style={{ transition: "d 0.7s cubic-bezier(.22,1,.36,1)" }} />
+          {points.map((p, i) => {
+            const isHover = hoverIdx === i;
+            const py = grown ? p.y : topPad + chartHeight;
+            return (
+              <g key={p.label}
+                onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
+                onTouchStart={() => setHoverIdx(isHover ? null : i)}
+                style={{ cursor: "pointer" }}>
+                <rect x={p.x - stepX / 2} y={topPad} width={stepX} height={chartHeight} fill="transparent" />
+                <circle cx={p.x} cy={py} r={isHover ? 5 : 3.5} fill={lineColor}
+                  style={{ transition: "cy 0.7s cubic-bezier(.22,1,.36,1), r 0.15s" }} />
+                <text x={p.x} y={topPad + chartHeight + 15} textAnchor="middle" fontSize="9" fill={C.muted} fontFamily="monospace">{p.label}</text>
+                {isHover && (
+                  <g style={{ transition: "opacity 0.15s" }}>
+                    <rect x={Math.max(2, Math.min(svgWidth - 60, p.x - 26))} y={Math.max(0, py - 24)} width={52} height={20} rx={5}
+                      fill={C.surface} stroke={C.border} strokeWidth={1} />
+                    <text x={Math.max(2, Math.min(svgWidth - 60, p.x - 26)) + 26} y={Math.max(0, py - 24) + 14}
+                      textAnchor="middle" fontSize="10" fontWeight="bold" fill={C.text} fontFamily="monospace">
+                      {p.value}{unit || ""}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 // دائرة إحصائية (Donut Chart) بسيطة لعرض توزيع المركبات حسب الحالة —
 // كل قطاع نسبة مئوية من الدائرة، مع رقم إجمالي في المنتصف وقائمة تفصيلية تحتها.
 function DonutChart({ segments, centerValue, centerLabel }) {
@@ -571,8 +636,23 @@ function DonutChart({ segments, centerValue, centerLabel }) {
   );
 }
 
-function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }) {
+function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecords, odometerLogs, maintenanceRecords, deliveries, vehicles, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
+  // إحصائيات سريعة لكل مركبة (عدد الرحلات + إجمالي تكلفة التشغيل) لتغذية
+  // شارتي الصفحة الرئيسية — بنفس منطق حساب "الرحلة" و"تكلفة التشغيل"
+  // المستخدم بالظبط في تبويب التقارير العامة (رحلة = مندوب + مركبة + يوم،
+  // وتكلفة التشغيل = تكلفة الوقود + تكلفة الصيانة).
+  const perFillAllDash = useMemo(() => computePerFillConsumption(fuelRecords || []), [fuelRecords]);
+  const perVehicleDash = useMemo(() => {
+    return (vehicles || []).map(v => {
+      const stops = (deliveries || []).filter(d => d.plate === v.plate);
+      const uniqueTrips = new Set(stops.map(d => `${d.repCode}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
+      const fills = perFillAllDash.filter(r => r.plate === v.plate);
+      const fuelCost = fills.reduce((s, r) => s + r.cost, 0);
+      const maintenanceCost = (maintenanceRecords || []).filter(r => r.plate === v.plate).reduce((s, r) => s + Number(r.cost || 0), 0);
+      return { plate: v.plate, tripsCount: uniqueTrips.size, totalOperationalCost: fuelCost + maintenanceCost };
+    });
+  }, [vehicles, deliveries, perFillAllDash, maintenanceRecords]);
   // التلوين والتنبيه بقوا معتمدين على انحراف كل مركبة عن متوسطها التاريخي
   // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط، ونفس
   // المحرك اللي بيغذّي الشارت الجديد تحت
@@ -621,6 +701,21 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
         <KpiCard icon={Users} value={employeesCount} label={tr("عدد الموظفين", "Number of employees")} color={C.amber} />
         <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد المركبات النشطة", "Active vehicles")} color={C.teal} />
       </div>
+
+      {vehiclesCount > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("عدد الرحلات لكل مركبة", "Number of trips per vehicle")}</h3>
+            <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("إجمالي الرحلات المسجَّلة لكل مركبة (كل السجلات)", "Total recorded trips per vehicle (all-time)")}</p>
+            <LineChart data={perVehicleDash.map(v => ({ label: v.plate, value: v.tripsCount }))} unit="" color={C.teal} />
+          </div>
+          <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+            <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("إجمالي تكلفة التشغيل لكل مركبة", "Total operating cost per vehicle")}</h3>
+            <p className="font-ui text-[11px] mb-3" style={{ color: C.muted }}>{tr("تكلفة الوقود + تكلفة الصيانة لكل مركبة (كل السجلات)", "Fuel cost + maintenance cost per vehicle (all-time)")}</p>
+            <FleetChart data={perVehicleDash.map(v => ({ label: v.plate, value: Math.round(v.totalOperationalCost), color: C.amber }))} unit="" />
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <h3 className="font-ui font-bold text-sm mb-1" style={{ color: C.text }}>{tr("توزيع المركبات حسب حالة استهلاك الوقود", "Vehicle breakdown by fuel-consumption status")}</h3>
@@ -5069,7 +5164,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                     : tab === "admin"
                       ? { accounts, setAccounts, currentUser: user, auditLog, refreshAccounts, refreshAuditLog, lang }
                       : tab === "dash"
-                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, vehicles, lang }
+                        ? { customersCount: customers.length, employeesCount: employees.length, vehiclesCount: vehicles.length, fuelRecords, odometerLogs, maintenanceRecords, deliveries, vehicles, lang }
                         : {};
 
   return (
