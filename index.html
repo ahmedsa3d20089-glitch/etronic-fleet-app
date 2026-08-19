@@ -646,7 +646,10 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   const perVehicleDash = useMemo(() => {
     return (vehicles || []).map(v => {
       const stops = (deliveries || []).filter(d => d.plate === v.plate);
-      const uniqueTrips = new Set(stops.map(d => `${d.repCode}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
+      // مفتاح هوية "الرحلة" لازم يشمل كود السائق مع كود المندوب مع التاريخ —
+      // مش كود المندوب لوحده (نفس المنطق المستخدم في تبويب التقارير العامة،
+      // راجع الشرح هناك).
+      const uniqueTrips = new Set(stops.map(d => `${d.repCode || ""}|${d.driverCode || ""}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
       const fills = perFillAllDash.filter(r => r.plate === v.plate);
       const fuelCost = fills.reduce((s, r) => s + r.cost, 0);
       const maintenanceCost = (maintenanceRecords || []).filter(r => r.plate === v.plate).reduce((s, r) => s + Number(r.cost || 0), 0);
@@ -4176,7 +4179,12 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
     const matchesRep = !repFilter || [d.repCode, d.repCode2].map(String).includes(String(repFilter));
     // كود السائق: يطابق حقل السائق فقط (driverCode) — مستقل تمامًا عن كود المندوب.
     const matchesDriver = !driverFilter || String(d.driverCode) === String(driverFilter);
-    return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || (d.plate || "").toLowerCase().includes(q.toLowerCase()))
+    // البحث العام: الاسم والكود بحث جزئي زي ما هو، لكن رقم المركبة لازم يكون
+    // تطابق تام (بعد تقليم المسافات وتوحيد الحالة) — مطابقة جزئية كانت بتخلي
+    // البحث برقم مركبة زي "716" يجيب معاه مركبات تانية زي "8716" أو "7160"
+    // لمجرد إن الرقم موجود كجزء من رقم لوحة مختلف تمامًا.
+    const matchesPlate = (d.plate || "").trim().toLowerCase() === q.trim().toLowerCase();
+    return (!q || (d.customerName || "").toLowerCase().includes(q.toLowerCase()) || String(d.customerCode || "").includes(q) || matchesPlate)
       && matchesRep
       && matchesDriver
       && (!statusFilter || (statusFilter === "returns" ? !!d.returns : d.status === statusFilter))
@@ -4568,7 +4576,13 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         const stops = filteredDeliveries.filter(d => d.plate === v.plate);
         // رحلة واحدة = مندوب واحد + مركبة واحدة + يوم واحد، بغض النظر عن عدد
         // العملاء اللي اتزاروا في نفس اليوم — مش رحلة لكل عميل على حدة.
-        const uniqueTrips = new Set(stops.map(d => `${d.repCode}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
+        // مفتاح الهوية لازم يشمل كود السائق مع كود المندوب مع التاريخ —
+        // مش كود المندوب لوحده. لو اقتصرنا على المندوب+التاريخ، أي توصيلتين
+        // بنفس المركبة ونفس اليوم لكن بسائقين مختلفين (أو مندوب فاضي في
+        // الاتنين، حالة "سائق بس بدون مندوب") هتتجمّع غلط في رحلة واحدة بدل
+        // رحلتين فعليتين — وده اللي بيخلي عدد الرحلات يتغيّر لما يتعدّل كود
+        // المندوب/السائق في سجل تسليم من غير ما يتحذف أي سجل فعليًا.
+        const uniqueTrips = new Set(stops.map(d => `${d.repCode || ""}|${d.driverCode || ""}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
         const deliveredCount = stops.filter(d => d.status === "تم التسليم").length;
         const undeliveredCount = stops.filter(d => d.status === "لم يتم التسليم").length;
         const fills = perFillAll.filter(r => r.plate === v.plate && inRange(r.date));
