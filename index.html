@@ -4659,6 +4659,20 @@ function buildOdometerReadings(plate, odometerLogs, fuelRecords) {
 // تغيير عداد المركبة أو خطأ إدخال. في الحالة دي بنحوّل الناتج السالب
 // لصفر بدل ما يظهر رقم غلط، لكن بنرجّع العلم عشان الواجهة تنبّه المستخدم
 // إن المسافة المعروضة ممكن تكون غير دقيقة ولازم يراجع بيانات العداد.
+// نسخة مرتّبة بقيمة تاريخ/وقت حقيقية (Date.parse) — مش مقارنة نصية —
+// مخصّصة لغرض فحص "التراجع الحقيقي" في العداد فقط، ومنفصلة تمامًا عن
+// القائمة المستخدمة في حساب المسافة (اللي بتفضل بترتيبها وفلترتها
+// الحالية بدون أي تغيير). أي قراءة بتاريخ غير صالح أو فاضي بتُستبعد من
+// المقارنة هنا فقط، عشان محدش يخترع ترتيب لقراءة معرفتش وقتها الحقيقي
+// ويطلّع تحذير كاذب.
+function sortReadingsForAnomalyCheck(readings) {
+  return readings
+    .map(r => ({ r, t: Date.parse(r.date) }))
+    .filter(x => !Number.isNaN(x.t))
+    .sort((a, b) => a.t - b.t)
+    .map(x => x.r);
+}
+
 function computeOdometerDistance(readings, dateFrom, dateTo) {
   if (!readings.length) return { distance: 0, hasData: false, anomaly: false };
 
@@ -4677,9 +4691,15 @@ function computeOdometerDistance(readings, dateFrom, dateTo) {
 
   const rawDelta = endReading.odometer - startReading.odometer;
   const relevant = readings.filter(r => r.date >= startReading.date && r.date <= endReading.date);
+
+  // فحص التراجع لازم يقارن كل قراءة بالقراءة اللي قبلها زمنيًا (الأقدم
+  // فالأحدث)، مش بترتيب وصول البيانات — عشان كده بنستخدم نسخة مرتّبة
+  // مستقلة (chronological) هنا بس. relevant نفسها فوق دي، ومن ثمّ
+  // startReading/endReading/rawDelta/distance، كلهم من غير أي تعديل.
+  const chronological = sortReadingsForAnomalyCheck(relevant);
   let anomaly = rawDelta < 0;
-  for (let i = 1; i < relevant.length; i++) {
-    if (relevant[i].odometer < relevant[i - 1].odometer) { anomaly = true; break; }
+  for (let i = 1; i < chronological.length; i++) {
+    if (chronological[i].odometer < chronological[i - 1].odometer) { anomaly = true; break; }
   }
 
   return { distance: Math.max(0, rawDelta), hasData: true, anomaly };
