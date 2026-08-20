@@ -4632,7 +4632,47 @@ function SettingsTab({ currentUser, lang, setLang, theme, setTheme, notifPermiss
 // في فترة زمنية واحدة، لإعطاء صورة تشغيلية شاملة بدل ما تكون
 // البيانات متفرقة بين تبويبات منفصلة.
 // ============================================================
-function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveries, employees, lang }) {
+
+// المسافة الحقيقية لمركبة خلال فترة = قراءة العداد عند نهاية الفترة ناقص
+// قراءة العداد عند بدايتها — مش فرق تعبئات الوقود. بندمج مصدرين لقراءة
+// العداد بنفس المنطق المستخدم في computeOilAlerts: سجلات "قراءة العداد"
+// المخصصة + حقل العداد المسجَّل مع كل تعبئة وقود، عشان محدش يفوّت قراءة
+// حقيقية موجودة في مكان تاني (زي مركبة بتُسجَّل قراءتها بس وقت التعبئة
+// من غير استخدام تبويب "قراءة العداد" أصلاً).
+function buildOdometerReadings(plate, odometerLogs, fuelRecords) {
+  const fromOdo = (odometerLogs || [])
+    .filter(l => l.plate === plate && (l.odometer || l.odometer === 0))
+    .map(l => ({ date: l.date || "", odometer: Number(l.odometer) }));
+  const fromFuel = (fuelRecords || [])
+    .filter(r => r.plate === plate && (r.odometer || r.odometer === 0))
+    .map(r => ({ date: r.date || "", odometer: Number(r.odometer) }));
+  return [...fromOdo, ...fromFuel].sort((a, b) => a.date.localeCompare(b.date) || a.odometer - b.odometer);
+}
+
+// مسافة الفترة [dateFrom, dateTo] فقط: آخر قراءة عند/قبل نهاية الفترة،
+// ناقص آخر قراءة عند/قبل بدايتها (أو أقدم قراءة متاحة لو مفيش قراءة قبل
+// البداية). كده المسافة مبنية على حدود الفترة الفعلية، مش على تاريخ أقرب
+// تعبئة وقود — فمفيش كيلومترات بتتفقد أو تتحسب مرتين عند حدود الفلتر.
+function computeOdometerDistance(readings, dateFrom, dateTo) {
+  if (!readings.length) return { distance: 0, hasData: false };
+
+  let startReading = readings[0];
+  if (dateFrom) {
+    const before = readings.filter(r => r.date <= dateFrom);
+    if (before.length) startReading = before[before.length - 1];
+  }
+
+  let endReading = readings[readings.length - 1];
+  if (dateTo) {
+    const upTo = readings.filter(r => r.date <= dateTo);
+    if (!upTo.length) return { distance: 0, hasData: false };
+    endReading = upTo[upTo.length - 1];
+  }
+
+  return { distance: Math.max(0, endReading.odometer - startReading.odometer), hasData: true };
+}
+
+function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveries, employees, odometerLogs, lang }) {
   const tr = (ar, en) => (lang === "en" ? en : ar);
   const MAINT_TYPE_LABELS = {
     "صيانة دورية": { ar: "صيانة دورية", en: "Routine maintenance" },
@@ -4666,8 +4706,6 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     ),
     [deliveries, dateFrom, dateTo, plateFilter, repFilter]);
 
-  const perFillAll = useMemo(() => computePerFillConsumption(fuelRecords || []), [fuelRecords]);
-
   const perVehicle = useMemo(() => {
     return (vehicles || [])
       .filter(v => !plateFilter || v.plate === plateFilter)
@@ -4684,12 +4722,19 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         const uniqueTrips = new Set(stops.map(d => `${d.repCode || ""}|${d.driverCode || ""}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
         const deliveredCount = stops.filter(d => d.status === "تم التسليم").length;
         const undeliveredCount = stops.filter(d => d.status === "لم يتم التسليم").length;
-        const fills = perFillAll.filter(r => r.plate === v.plate && inRange(r.date));
+        const periodFuel = (fuelRecords || []).filter(r => r.plate === v.plate && inRange(r.date));
         const maint = (maintenanceRecords || []).filter(r => r.plate === v.plate && inRange(r.date));
 
-        const totalDistance = fills.reduce((s, r) => s + Math.max(0, r.km), 0);
-        const totalLiters = fills.reduce((s, r) => s + r.liters, 0);
-        const fuelCost = fills.reduce((s, r) => s + r.cost, 0);
+        // المسافة من قراءة العداد الفعلية عند حدود الفترة — مستقلة تمامًا
+        // عن انتظام تعبئات الوقود، ومحسوبة بدون تكرار أو فقدان عند الحدود.
+        const odometerReadings = buildOdometerReadings(v.plate, odometerLogs, fuelRecords);
+        const totalDistance = computeOdometerDistance(odometerReadings, dateFrom, dateTo).distance;
+
+        // اللترات وتكلفة الوقود تُجمع مباشرة من كل سجلات التعبئة في الفترة
+        // (زي تبويب "الوقود" بالظبط)، مش من فروقات التعبئات المتتالية —
+        // عشان أول تعبئة لكل مركبة متتفقدش من الإجمالي.
+        const totalLiters = periodFuel.reduce((s, r) => s + Number(r.liters || 0), 0);
+        const fuelCost = periodFuel.reduce((s, r) => s + Number(r.cost || 0), 0);
         const kmPerLiter = totalLiters > 0 ? totalDistance / totalLiters : 0;
         const literPer100km = totalDistance > 0 ? (totalLiters * 100) / totalDistance : 0;
 
@@ -4716,7 +4761,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           totalOperationalCost, costPerTrip, costPerKm,
         };
       });
-  }, [vehicles, filteredDeliveries, perFillAll, maintenanceRecords, plateFilter, dateFrom, dateTo]);
+  }, [vehicles, filteredDeliveries, fuelRecords, odometerLogs, maintenanceRecords, plateFilter, dateFrom, dateTo]);
 
   const totals = useMemo(() => perVehicle.reduce((acc, r) => ({
     trips: acc.trips + r.tripsCount,
@@ -5491,7 +5536,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
                   : tab === "deliveries"
                     ? { deliveries, setDeliveries, employees, isAdmin, lang }
                     : tab === "generalReports"
-                    ? { vehicles, fuelRecords, maintenanceRecords, deliveries, employees, lang }
+                    ? { vehicles, fuelRecords, maintenanceRecords, deliveries, employees, odometerLogs, lang }
                     : tab === "settings"
                     ? { currentUser: user, lang, setLang, theme, setTheme, notifPermission, requestNotifPermission }
                     : tab === "admin"
