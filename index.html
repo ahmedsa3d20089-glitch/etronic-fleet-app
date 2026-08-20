@@ -4653,8 +4653,14 @@ function buildOdometerReadings(plate, odometerLogs, fuelRecords) {
 // ناقص آخر قراءة عند/قبل بدايتها (أو أقدم قراءة متاحة لو مفيش قراءة قبل
 // البداية). كده المسافة مبنية على حدود الفترة الفعلية، مش على تاريخ أقرب
 // تعبئة وقود — فمفيش كيلومترات بتتفقد أو تتحسب مرتين عند حدود الفلتر.
+//
+// anomaly = true لما يكون فيه "رجوع للخلف" في قراءات العداد ضمن الفترة
+// المعروضة (قراءة لاحقة بالتاريخ أقل من قراءة سابقة لها) — عادة بسبب
+// تغيير عداد المركبة أو خطأ إدخال. في الحالة دي بنحوّل الناتج السالب
+// لصفر بدل ما يظهر رقم غلط، لكن بنرجّع العلم عشان الواجهة تنبّه المستخدم
+// إن المسافة المعروضة ممكن تكون غير دقيقة ولازم يراجع بيانات العداد.
 function computeOdometerDistance(readings, dateFrom, dateTo) {
-  if (!readings.length) return { distance: 0, hasData: false };
+  if (!readings.length) return { distance: 0, hasData: false, anomaly: false };
 
   let startReading = readings[0];
   if (dateFrom) {
@@ -4665,11 +4671,18 @@ function computeOdometerDistance(readings, dateFrom, dateTo) {
   let endReading = readings[readings.length - 1];
   if (dateTo) {
     const upTo = readings.filter(r => r.date <= dateTo);
-    if (!upTo.length) return { distance: 0, hasData: false };
+    if (!upTo.length) return { distance: 0, hasData: false, anomaly: false };
     endReading = upTo[upTo.length - 1];
   }
 
-  return { distance: Math.max(0, endReading.odometer - startReading.odometer), hasData: true };
+  const rawDelta = endReading.odometer - startReading.odometer;
+  const relevant = readings.filter(r => r.date >= startReading.date && r.date <= endReading.date);
+  let anomaly = rawDelta < 0;
+  for (let i = 1; i < relevant.length; i++) {
+    if (relevant[i].odometer < relevant[i - 1].odometer) { anomaly = true; break; }
+  }
+
+  return { distance: Math.max(0, rawDelta), hasData: true, anomaly };
 }
 
 function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveries, employees, odometerLogs, lang }) {
@@ -4728,7 +4741,9 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         // المسافة من قراءة العداد الفعلية عند حدود الفترة — مستقلة تمامًا
         // عن انتظام تعبئات الوقود، ومحسوبة بدون تكرار أو فقدان عند الحدود.
         const odometerReadings = buildOdometerReadings(v.plate, odometerLogs, fuelRecords);
-        const totalDistance = computeOdometerDistance(odometerReadings, dateFrom, dateTo).distance;
+        const odoResult = computeOdometerDistance(odometerReadings, dateFrom, dateTo);
+        const totalDistance = odoResult.distance;
+        const odometerAnomaly = odoResult.anomaly;
 
         // اللترات وتكلفة الوقود تُجمع مباشرة من كل سجلات التعبئة في الفترة
         // (زي تبويب "الوقود" بالظبط)، مش من فروقات التعبئات المتتالية —
@@ -4750,7 +4765,13 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
 
         const totalOperationalCost = fuelCost + maintenanceCost;
         const costPerKm = totalDistance > 0 ? totalOperationalCost / totalDistance : 0;
-        const costPerTrip = uniqueTrips.size > 0 ? totalOperationalCost / uniqueTrips.size : 0;
+        // "تكلفة الرحلة" مقياس على مستوى المركبة كاملة، لأن الوقود والصيانة
+        // مش مرتبطين بمندوب/سائق معيّن. لو فلتر المندوب مفعّل، uniqueTrips
+        // بيبقى خاص برحلات هذا المندوب بس، بينما totalOperationalCost لسه
+        // بيمثّل تكلفة المركبة كلها لكل السائقين/المناديب في الفترة — قسمة
+        // الاتنين على بعض هتدّي رقم مضخّم ومضلِّل، فبنعطّل الحساب في الحالة
+        // دي (null) بدل ما نعرضه، والواجهة بتعرض "—" مع توضيح السبب.
+        const costPerTrip = (uniqueTrips.size > 0 && !repFilter) ? totalOperationalCost / uniqueTrips.size : null;
 
         return {
           plate: v.plate,
@@ -4759,6 +4780,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           totalDistance, totalLiters, kmPerLiter, literPer100km,
           fuelCost, maintenanceCost, maintenanceTypesSummary,
           totalOperationalCost, costPerTrip, costPerKm,
+          odometerAnomaly,
         };
       });
   }, [vehicles, filteredDeliveries, fuelRecords, odometerLogs, maintenanceRecords, plateFilter, dateFrom, dateTo]);
@@ -4774,14 +4796,16 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     operationalCost: acc.operationalCost + r.totalOperationalCost,
   }), { trips: 0, delivered: 0, undelivered: 0, distance: 0, liters: 0, fuelCost: 0, maintenanceCost: 0, operationalCost: 0 }), [perVehicle]);
 
+  const anomalyPlates = perVehicle.filter(r => r.odometerAnomaly).map(r => r.plate);
+
   function exportXlsx() {
     const headers = tr(
       ["المركبة", "عدد الرحلات", "عملاء تم التسليم", "عملاء لم يتم التسليم", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة الرحلة", "تكلفة/كم"],
       ["Vehicle", "Trips", "Delivered", "Undelivered", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost per trip", "Cost/km"]
     );
     const rows = perVehicle.map(r => [
-      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
-      round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
+      r.plate + (r.odometerAnomaly ? " ⚠" : ""), r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), r.costPerTrip ? round1(r.costPerTrip) : "—", round2(r.costPerKm),
     ]);
     rows.push([
       tr("الإجمالي", "Total"), totals.trips, totals.delivered, totals.undelivered, round1(totals.distance), round1(totals.liters), "", "",
@@ -4791,8 +4815,8 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
   }
   function exportPdf() {
     const rows = perVehicle.map(r => [
-      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
-      round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), round1(r.costPerTrip), round2(r.costPerKm),
+      r.plate + (r.odometerAnomaly ? " ⚠" : ""), r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), r.costPerTrip ? round1(r.costPerTrip) : "—", round2(r.costPerKm),
     ]);
     rows.push([
       tr("الإجمالي", "Total"), totals.trips, totals.delivered, totals.undelivered, round1(totals.distance), round1(totals.liters), "", "",
@@ -4835,6 +4859,24 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           )}
         </div>
       </div>
+
+      {repFilter && (
+        <p className="font-ui text-[11px] mb-4" style={{ color: C.amber }}>
+          {tr(
+            "⚠ عمود \"تكلفة الرحلة\" غير متاح أثناء الفلترة بمندوب/سائق معيّن: تكلفة الوقود والصيانة مسجَّلة على مستوى المركبة كاملة (لكل السائقين في الفترة)، فقسمتها على رحلات مندوب واحد فقط تديك رقمًا غير دقيق.",
+            "⚠ The \"Cost per trip\" column is unavailable while filtering by a specific rep/driver: fuel and maintenance costs are recorded at the whole-vehicle level (all drivers in the period), so dividing them by one rep's trips alone would be inaccurate."
+          )}
+        </p>
+      )}
+
+      {anomalyPlates.length > 0 && (
+        <p className="font-ui text-[11px] mb-4" style={{ color: C.red }}>
+          {tr(
+            `⚠ تم رصد تعارض في قراءة العداد (رجوع للخلف) لمركبة: ${anomalyPlates.join("، ")}. المسافة المعروضة لهذه المركبة/المركبات في الفترة الحالية قد تكون غير دقيقة — راجع سجلات "قراءة العداد" والوقود لهذه المركبة.`,
+            `⚠ An odometer conflict (backward reading) was detected for: ${anomalyPlates.join(", ")}. The distance shown for this vehicle in the current period may be inaccurate — please review its odometer and fuel records.`
+          )}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Navigation} value={totals.trips} label={tr("إجمالي عدد الرحلات", "Total trips")} color={C.teal} />
@@ -4882,7 +4924,9 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.tripsCount}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.teal }}>{r.deliveredCount}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: r.undeliveredCount ? C.red : C.muted }}>{r.undeliveredCount}</td>
-                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalDistance)}</td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: r.odometerAnomaly ? C.red : C.text }} title={r.odometerAnomaly ? tr("تعارض في قراءة العداد — راجع البيانات", "Odometer conflict — please review the data") : undefined}>
+                    {round1(r.totalDistance)}{r.odometerAnomaly ? " ⚠" : ""}
+                  </td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalLiters)}</td>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{r.kmPerLiter ? round2(r.kmPerLiter) : "—"}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.literPer100km ? round2(r.literPer100km) : "—"}</td>
@@ -4890,7 +4934,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.red }}>{round1(r.maintenanceCost)}</td>
                   <td className="p-2.5 font-ui text-[11px]" style={{ color: C.muted }}>{r.maintenanceTypesSummary || "—"}</td>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.text }}>{round1(r.totalOperationalCost)}</td>
-                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.amber }}>{r.costPerTrip ? round1(r.costPerTrip) : "—"}</td>
+                  <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.amber }} title={r.costPerTrip === null ? tr("غير متاح أثناء فلترة المندوب/السائق", "Unavailable while filtering by rep/driver") : undefined}>{r.costPerTrip ? round1(r.costPerTrip) : "—"}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.costPerKm ? round2(r.costPerKm) : "—"}</td>
                 </tr>
               ))}
