@@ -250,7 +250,22 @@
 <script type="text/babel" data-presets="react">
 const { useState, useMemo } = React;
 
+// ⚠️ تنبيه أمني مهم — اقرأه قبل النشر:
+// المفتاح ده مكتوب صراحة في كود يوصل لمتصفح المستخدم مباشرة (بدون أي خادم
+// وسيط)، يعني أي حد يفتح "عرض المصدر" في المتصفح يقدر ينسخه ويستخدمه بنفسه
+// على حساب Google Cloud الخاص بيك — ده مختلف تمامًا عن firebaseConfig.apiKey
+// اللي تحته (ده آمن للنشر العلني لأن الحماية الحقيقية بتاعته من Firestore
+// Security Rules مش من إخفاء المفتاح). أما مفتاح Vision API فمفروض يتقيّد.
+// الحل الكامل الصحيح (لازم يتعمل برّه الكود ده):
+//   1- افتح Google Cloud Console → API & Services → Credentials → قيّد
+//      المفتاح ده بـ HTTP referrers (يشتغل بس من دومين موقعك المنشور).
+//   2- الأفضل: انقل الاستدعاء بالكامل لخلف Cloud Function/Backend بسيط
+//      يحتفظ بالمفتاح على السيرفر ويستقبل هو بس الطلب من التطبيق، ووقتها
+//      حط رابطها في OCR_PROXY_URL تحت وسيب VISION_API_KEY فاضي.
 const VISION_API_KEY = "AIzaSyBCABnGTPi4lOyAes58FS3VhT9Yp3AQ76o";
+// لو حطيت هنا رابط Cloud Function خاص بيك، ocrReceipt() هتستخدمه تلقائيًا
+// بدل النداء المباشر لـ Google (والمفتاح وقتها يفضل على السيرفر بس، مش هنا).
+const OCR_PROXY_URL = "";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCWsNzyrcUREB6xGWOGdF7iUevkUIdd0js",
@@ -306,6 +321,9 @@ const Fuel = makeIcon("⛽");
 const Wrench = makeIcon("🔧");
 const Plus = makeIcon("➕");
 const Trash2 = makeIcon("🗑️");
+// أيقونة مخصصة لتسجيل الخروج — بيقة "🚪" أوضح بصريًا من "🗑️" (سلة مهملات)
+// اللي كانت بتوحي غلط إن زر الخروج بيحذف حاجة.
+const LogOut = makeIcon("🚪");
 const Calendar = makeIcon("📅");
 const Navigation = makeIcon("🧭");
 const Edit = makeIcon("✏️");
@@ -702,7 +720,7 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Building2} value={customersCount} label={tr("عدد العملاء في قاعدة البيانات", "Customers in the database")} color={C.teal} />
         <KpiCard icon={Users} value={employeesCount} label={tr("عدد الموظفين", "Number of employees")} color={C.amber} />
-        <KpiCard icon={Truck} value={vehiclesCount} label={tr("عدد المركبات النشطة", "Active vehicles")} color={C.teal} />
+        <KpiCard icon={Truck} value={vehiclesCount} label={tr("إجمالي عدد المركبات", "Total vehicles")} color={C.teal} />
       </div>
 
       {vehiclesCount > 0 && (
@@ -772,7 +790,7 @@ function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) 
   const [form, setForm] = useState({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
-  const filtered = vehicles.filter(v => v.plate.includes(q));
+  const filtered = vehicles.filter(v => String(v.plate || "").includes(q));
 
   function addVehicle() {
     if (!form.plate) return;
@@ -783,12 +801,12 @@ function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) 
       alert(tr("رقم المركبة هذا مسجَّل بالفعل — استخدم رقمًا مختلفًا", "This plate number is already registered — use a different number"));
       return;
     }
-    setVehicles([...vehicles, { ...form, id: Date.now() }]);
+    setVehicles(prev => [...prev, { ...form, id: Date.now() }]);
     setForm({ plate: "", model: "", status: "نشطة", tankCapacity: "" });
   }
   function removeVehicle(id) {
     if (!confirm(tr("هل أنت متأكد من حذف هذه المركبة؟", "Are you sure you want to delete this vehicle?"))) return;
-    setVehicles(vehicles.filter(v => v.id !== id));
+    setVehicles(prev => prev.filter(v => v.id !== id));
   }
   function startEdit(v) {
     setEditingId(v.id);
@@ -799,12 +817,19 @@ function VehiclesTab({ vehicles, setVehicles, refreshVehicles, isAdmin, lang }) 
     setEditForm(null);
   }
   function saveEdit() {
+    // نفس تحقق addVehicle بالظبط — من غير كده ممكن حد يمسح رقم اللوحة أثناء
+    // التعديل ويحفظ، فتبقى عندنا مركبة بلوحة فاضية بتكسر كل الربط بيها في
+    // الوقود والصيانة وخط السير وقراءة العداد (كلهم بيعتمدوا على plate).
+    if (!String(editForm.plate || "").trim()) {
+      alert(tr("رقم اللوحة إلزامي ولا يمكن تركه فارغًا", "Plate number is required and cannot be left empty"));
+      return;
+    }
     const isDuplicate = vehicles.some(v => v.id !== editingId && String(v.plate).trim() === String(editForm.plate).trim());
     if (isDuplicate) {
       alert(tr("رقم المركبة هذا مسجَّل بالفعل — استخدم رقمًا مختلفًا", "This plate number is already registered — use a different number"));
       return;
     }
-    setVehicles(vehicles.map(v => v.id === editingId ? { ...editForm } : v));
+    setVehicles(prev => prev.map(v => v.id === editingId ? { ...editForm } : v));
     setEditingId(null);
     setEditForm(null);
   }
@@ -911,13 +936,13 @@ function EmployeesTab({ employees, setEmployees, refreshEmployees, isAdmin, lang
       alert(tr("هذا الكود مستخدم بالفعل لموظف آخر — استخدم كودًا مختلفًا", "This code is already used by another employee — use a different code"));
       return;
     }
-    setEmployees([...employees, { ...form, id: Date.now() }]);
+    setEmployees(prev => [...prev, { ...form, id: Date.now() }]);
     setForm({ name: "", code: "", position: "", department: "", phone: "" });
     setPage(1);
   }
   function removeEmployee(id) {
     if (!confirm(tr("هل أنت متأكد من حذف هذا الموظف؟", "Are you sure you want to delete this employee?"))) return;
-    setEmployees(employees.filter(e => e.id !== id));
+    setEmployees(prev => prev.filter(e => e.id !== id));
   }
   function startEdit(e) {
     setEditingId(e.id);
@@ -928,12 +953,19 @@ function EmployeesTab({ employees, setEmployees, refreshEmployees, isAdmin, lang
     setEditForm(null);
   }
   function saveEdit() {
+    // نفس تحقق addEmployee بالظبط — من غير كده ممكن حد يمسح الاسم أو الكود
+    // أثناء التعديل ويحفظ، فيبقى الموظف ده "مش قابل للإيجاد" بالكود في
+    // بحث خط السير (repByCode/driverByCode) رغم إن سجله لسه موجود.
+    if (!String(editForm.name || "").trim() || !String(editForm.code || "").trim()) {
+      alert(tr("اسم الموظف وكوده إلزاميان ولا يمكن ترك أي منهما فارغًا", "Employee name and code are required and cannot be left empty"));
+      return;
+    }
     const isDuplicate = employees.some(e => e.id !== editingId && String(e.code) === String(editForm.code));
     if (isDuplicate) {
       alert(tr("هذا الكود مستخدم بالفعل لموظف آخر — استخدم كودًا مختلفًا", "This code is already used by another employee — use a different code"));
       return;
     }
-    setEmployees(employees.map(e => e.id === editingId ? { ...editForm } : e));
+    setEmployees(prev => prev.map(e => e.id === editingId ? { ...editForm } : e));
     setEditingId(null);
     setEditForm(null);
   }
@@ -1089,13 +1121,13 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
 
   function addCustomer() {
     if (!form.name || !form.code) return;
-    setCustomers([...customers, { ...form, id: Date.now() }]);
+    setCustomers(prev => [...prev, { ...form, id: Date.now() }]);
     setForm({ name: "", code: "", territory: "", governorate: "", city: "" });
     setPage(1);
   }
   function removeCustomer(id) {
     if (!confirm(tr("هل أنت متأكد من حذف هذا العميل؟", "Are you sure you want to delete this customer?"))) return;
-    setCustomers(customers.filter(c => c.id !== id));
+    setCustomers(prev => prev.filter(c => c.id !== id));
     setCustomerLocations(prev => {
       const next = { ...prev };
       delete next[id];
@@ -1162,7 +1194,7 @@ function CustomersTab({ customers, setCustomers, customerLocations, setCustomerL
     setFieldsForm({ name: c.name || "", territory: c.territory || "", governorate: c.governorate || "", city: c.city || "" });
   }
   function saveFields(uid) {
-    setCustomers(customers.map(c => c.id === uid ? { ...c, ...fieldsForm } : c));
+    setCustomers(prev => prev.map(c => c.id === uid ? { ...c, ...fieldsForm } : c));
     setEditFieldsUid(null);
   }
 
@@ -1562,6 +1594,18 @@ async function exportTableToXlsx(title, headers, rows, filename) {
   URL.revokeObjectURL(url);
 }
 
+// تهريب محارف HTML الخاصة قبل إدراج أي بيانات (اسم عميل، ملاحظات، إلخ) داخل
+// innerHTML — من غير كده أي نص فيه "<" أو ">" ممكن يكسر شكل الجدول أو حتى
+// ينفّذ كود فعليًا (زي وسم <img onerror=...>) لحظة تصدير PDF.
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function exportTableToPdf(title, headers, rows, filename) {
   await ensurePdfLibs();
   const wrapper = document.createElement("div");
@@ -1574,11 +1618,11 @@ async function exportTableToPdf(title, headers, rows, filename) {
   wrapper.style.direction = "rtl";
   wrapper.style.fontFamily = "Tahoma, Arial, sans-serif";
 
-  const headHtml = headers.map(h => `<th style="border:1px solid #ccc;padding:8px;background:#12151B;color:#fff;font-size:13px;text-align:right;">${h}</th>`).join("");
-  const bodyHtml = rows.map(r => `<tr>${r.map(c => `<td style="border:1px solid #ccc;padding:8px;font-size:12px;color:#111;text-align:right;">${c}</td>`).join("")}</tr>`).join("");
+  const headHtml = headers.map(h => `<th style="border:1px solid #ccc;padding:8px;background:#12151B;color:#fff;font-size:13px;text-align:right;">${escapeHtml(h)}</th>`).join("");
+  const bodyHtml = rows.map(r => `<tr>${r.map(c => `<td style="border:1px solid #ccc;padding:8px;font-size:12px;color:#111;text-align:right;">${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
 
   wrapper.innerHTML = `
-    <h2 style="margin:0 0 4px;font-size:18px;color:#111;">${title}</h2>
+    <h2 style="margin:0 0 4px;font-size:18px;color:#111;">${escapeHtml(title)}</h2>
     <p style="margin:0 0 14px;font-size:11px;color:#666;">Etronic Fleet Dashboard · ${new Date().toISOString().slice(0, 10)}</p>
     <table style="width:100%;border-collapse:collapse;">
       <thead><tr>${headHtml}</tr></thead>
@@ -1659,7 +1703,12 @@ function compressImageForStorage(file, maxDim = 1000, quality = 0.6) {
 }
 
 async function ocrReceipt(base64) {
-  const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`, {
+  // لو فيه بروكسي خلفي مُعرَّف (OCR_PROXY_URL)، بنستخدمه هو — المفتاح وقتها
+  // بيفضل محفوظ على السيرفر بتاعك بس، ومبيوصلش لكود المتصفح خالص.
+  const endpoint = OCR_PROXY_URL
+    ? OCR_PROXY_URL
+    : `https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`;
+  const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1747,7 +1796,7 @@ function FuelTab({ records, setRecords, vehicles, employees, isAdmin, currentUse
 
   const sorted = useMemo(() => [...records].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records]);
   const filtered = useMemo(() => sorted.filter(r =>
-    !listFilter || r.plate.toLowerCase().includes(listFilter.toLowerCase()) || (r.driver || "").toLowerCase().includes(listFilter.toLowerCase())
+    !listFilter || String(r.plate || "").toLowerCase().includes(listFilter.toLowerCase()) || (r.driver || "").toLowerCase().includes(listFilter.toLowerCase())
   ), [sorted, listFilter]);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -2349,6 +2398,11 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
   const [podUid, setPodUid] = useState(null);
   const [podForm, setPodForm] = useState({ status: "", recipientName: "", returns: "", notes: "", photo: null });
   const [savingPod, setSavingPod] = useState(false);
+  // قفل متزامن (ref) بجانب حالة savingPod — حالة الـ state لوحدها ميكفيش
+  // لمنع نقرة مزدوجة فعليًا، لأن setSavingPod(true) وبعدها setSavingPod(false)
+  // بيحصلوا في نفس اللحظة (React بيجمّعهم) قبل ما أي إعادة رسم تظهر، فالزرار
+  // ميبقاش معطّل فعليًا وقت الحفظ. الـ ref ده بيتحدّث فورًا ومش محتاج إعادة رسم.
+  const savingPodRef = React.useRef(false);
   const [repCode, setRepCode] = useState("");
   const [repName, setRepName] = useState("");
   const [repCode2, setRepCode2] = useState("");
@@ -2459,10 +2513,16 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
     return (vehicles || []).find(v => String(v.plate) === String(plate).trim());
   }
   function handleRepCodeChange(code) {
+    // *** السبب الحقيقي لتعبئة بيانات الرحلة السابقة ***
+    // كان في نداء openRouteForCode(code) هنا بيحصل تلقائيًا بمجرد ما الكود
+    // يتطابق مع موظف موجود — ودي كانت بتجيب آخر خط سير محفوظ لنفس الكود ده
+    // (من Firestore) وتملأ بيه كل خانات الرحلة (المحطات، الكود التاني، رقم
+    // المركبة، التاريخ) تلقائيًا، حتى لو الرحلة دي "جديدة" فعليًا ومفيش أي
+    // محطات مُضافة لسه. الكود دلوقتي بيُستخدم فقط للتعرف على اسم الموظف
+    // وعرضه — من غير أي نسخ لبيانات رحلة قديمة.
     const match = repByCode(code);
     setRepCode(code);
     setRepName(match ? match.name : "");
-    if (match) openRouteForCode(code);
   }
   function handleRepCode2Change(code) {
     const match = repByCode(code);
@@ -2470,10 +2530,10 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
     setRepName2(match ? match.name : "");
   }
   function handleDriverCodeChange(code) {
+    // نفس سبب handleRepCodeChange أعلاه بالظبط.
     const match = repByCode(code);
     setDriverCode(code);
     setDriverName(match ? match.name : "");
-    if (match) openRouteForCode(code);
   }
   // استرجاع وفتح خط السير المرتبط بكود (سائق أو مندوب أساسي) تلقائيًا —
   // بعد التأكد إن الكود صحيح ومسجَّل في قاعدة بيانات الموظفين (repByCode
@@ -2522,6 +2582,7 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
     compressImageForStorage(file).then(photo => setPodForm(prev => ({ ...prev, photo }))).catch(() => {});
   }
   function savePod(stop) {
+    if (savingPodRef.current) return; // نقرة ثانية جاءت قبل أي إعادة رسم — تُتجاهل فورًا
     if (!podForm.status) {
       alert(tr('اختر "تم التسليم" أو "لم يتم التسليم" أولًا', 'Choose either "Delivered" or "Not delivered" first'));
       return;
@@ -2542,8 +2603,24 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
       alert(tr("رقم المركبة إلزامي وصحيح — أدخله بجانب كود المندوب أعلاه قبل تسجيل أي عملية تسليم", "A valid vehicle number is required — enter it next to the rep code above before recording any delivery"));
       return;
     }
-    setSavingPod(true);
     const tripDate = routeDate || todayStr;
+    // تحقق من وجود سجل تسليم مطابق تمامًا لنفس العميل ونفس اليوم بنفس الحالة
+    // ونفس السائق/المندوب — غالبًا نتيجة نقرة مزدوجة أو إعادة إرسال بالخطأ.
+    const isDuplicate = (deliveries || []).some(d =>
+      d.customerUid === stop.uid &&
+      d.date === tripDate &&
+      d.status === podForm.status &&
+      String(d.driverCode || "") === String(driverCode || "") &&
+      String(d.repCode || "") === String(repCode || "")
+    );
+    if (isDuplicate && !confirm(tr(
+      "يوجد بالفعل سجل تسليم بنفس البيانات لهذا العميل اليوم — هل تريد تسجيله مرة أخرى فعلًا؟",
+      "A delivery record with the exact same details for this customer today already exists — do you really want to record it again?"
+    ))) {
+      return;
+    }
+    savingPodRef.current = true;
+    setSavingPod(true);
     const record = {
       id: Date.now(),
       customerUid: stop.uid,
@@ -2565,7 +2642,8 @@ function RouteTab({ stops, setStops, savedRoutes, setSavedRoutes, customerLocati
       deliveredAt: new Date().toISOString(),
       enteredBy: currentUser?.email || "",
     };
-    setDeliveries([...(deliveries || []), record]);
+    setDeliveries(prev => [...(prev || []), record]);
+    savingPodRef.current = false;
     setSavingPod(false);
     setPodUid(null);
     setPodForm({ status: "", recipientName: "", returns: "", notes: "", photo: null });
@@ -2822,7 +2900,7 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.date || "").localeCompare(a.date || "")), [logs]);
   const filtered = useMemo(() => sorted.filter(l => {
-    const matchesText = !listFilter || l.plate.toLowerCase().includes(listFilter.toLowerCase());
+    const matchesText = !listFilter || String(l.plate || "").toLowerCase().includes(listFilter.toLowerCase());
     const matchesPlate = !plateFilter || l.plate === plateFilter;
     const matchesFrom = !dateFrom || (l.date || "") >= dateFrom;
     const matchesTo = !dateTo || (l.date || "") <= dateTo;
@@ -3097,7 +3175,10 @@ function OdometerTab({ logs, setLogs, vehicles, currentUser, isAdmin, lang }) {
 function computePerFillConsumption(fuelRecords) {
   const byPlate = {};
   fuelRecords.forEach(r => {
-    if (r.odometer) {
+    // (r.odometer || r.odometer === 0) بدل (r.odometer) لوحدها — عشان القراءة
+    // 0 (مركبة جديدة بعداد صفر) قيمة falsy في JS، فكانت بتتستبعد من الحساب
+    // زي بالظبط لو الحقل فاضي أو مش موجود أصلًا، رغم إنها قيمة حقيقية وصحيحة.
+    if (r.odometer || r.odometer === 0) {
       if (!byPlate[r.plate]) byPlate[r.plate] = [];
       byPlate[r.plate].push(r);
     }
@@ -3156,11 +3237,16 @@ function computeVehicleFuelAnalytics(plate, fuelRecords) {
   const cutoff30 = cutoff(FUEL_ANALYTICS_CONFIG.rollingDaysShort);
   const cutoff90 = cutoff(FUEL_ANALYTICS_CONFIG.rollingDaysLong);
 
-  const last10 = rows.slice(-FUEL_ANALYTICS_CONFIG.rollingFillCount);
-  const last30Days = rows.filter(r => r.date && new Date(r.date) >= cutoff30);
-  const last90Days = rows.filter(r => r.date && new Date(r.date) >= cutoff90);
-
   const current = rows[rows.length - 1].kmPerLiter;
+  // بنستبعد القراءة الحالية (آخر تعبئة) من مجموعة حساب المتوسط المرجعي —
+  // لو سبناها جوه المتوسط، بنكون بنقارن القراءة بنفسها ضمنيًا، وده بيقلّل
+  // نسبة الانحراف الحقيقية صناعيًا (خصوصًا مع قلة عدد التعبئات لمركبة معينة)
+  // ويخلي تنبيهات "حرجة" فعلية تتصنّف غلط كـ"تحذير" أو متتصنفش أصلًا.
+  const history = rows.slice(0, -1);
+  const last10 = history.slice(-FUEL_ANALYTICS_CONFIG.rollingFillCount);
+  const last30Days = history.filter(r => r.date && new Date(r.date) >= cutoff30);
+  const last90Days = history.filter(r => r.date && new Date(r.date) >= cutoff90);
+
   const avgLast10 = averageOf(last10.map(r => r.kmPerLiter));
   const avgLast30Days = averageOf(last30Days.map(r => r.kmPerLiter));
   const avgLast90Days = averageOf(last90Days.map(r => r.kmPerLiter));
@@ -3196,13 +3282,15 @@ const OIL_INTERVAL_KM = 2000;
 function computeOilAlerts(vehicles, odometerLogs, fuelRecords, maintenanceRecords) {
   const alerts = [];
   (vehicles || []).forEach(v => {
-    const odoReadings = (odometerLogs || []).filter(l => l.plate === v.plate && l.odometer).map(l => Number(l.odometer));
-    const fuelReadings = (fuelRecords || []).filter(f => f.plate === v.plate && f.odometer).map(f => Number(f.odometer));
+    // (x.odometer || x.odometer === 0) عشان قراءة العداد 0 متتستبعدش غلط
+    // (نفس السبب الموضّح في computePerFillConsumption).
+    const odoReadings = (odometerLogs || []).filter(l => l.plate === v.plate && (l.odometer || l.odometer === 0)).map(l => Number(l.odometer));
+    const fuelReadings = (fuelRecords || []).filter(f => f.plate === v.plate && (f.odometer || f.odometer === 0)).map(f => Number(f.odometer));
     const allReadings = [...odoReadings, ...fuelReadings];
     if (allReadings.length === 0) return;
     const currentOdometer = Math.max(...allReadings);
 
-    const oilChanges = (maintenanceRecords || []).filter(r => r.plate === v.plate && r.type === "تغيير الزيت" && r.odometer);
+    const oilChanges = (maintenanceRecords || []).filter(r => r.plate === v.plate && r.type === "تغيير الزيت" && (r.odometer || r.odometer === 0));
     const lastOilOdometer = oilChanges.length > 0 ? Math.max(...oilChanges.map(r => Number(r.odometer))) : 0;
 
     const kmSinceOil = currentOdometer - lastOilOdometer;
@@ -3286,7 +3374,7 @@ function computeVirtualTank(plate, vehicles, fuelRecords) {
   if (!baselineKmPerL) return { plate, hasCapacity: true, hasBaseline: false, entries: [], discrepancies: [] };
 
   const fills = fuelRecords
-    .filter(r => r.plate === plate && r.odometer)
+    .filter(r => r.plate === plate && (r.odometer || r.odometer === 0))
     .sort((a, b) => (a.date || "").localeCompare(b.date || "") || Number(a.odometer) - Number(b.odometer));
   if (fills.length < 2) return { plate, hasCapacity: true, hasBaseline: true, entries: [], discrepancies: [] };
 
@@ -3325,7 +3413,12 @@ function computeVirtualTank(plate, vehicles, fuelRecords) {
   }
 
   const totalGap = discrepancies.reduce((sum, e) => sum + e.gap, 0);
-  return { plate, hasCapacity: true, hasBaseline: true, capacity, baselineKmPerL, entries: entries.reverse(), discrepancies, totalGap };
+  // entries و discrepancies بيترتيب تصاعدي بالتاريخ (من الأقدم للأحدث) —
+  // زمان entries كانت بتتقلب لوحدها (.reverse())، فتبقى بترتيب مختلف عن
+  // discrepancies من غير أي سبب واضح؛ ده مكنش بيظهر كخلل فعليًا لأن entries
+  // مكنش بيتستخدم في أي مكان تاني بالتطبيق، لكن سيبناه موحّد للنضافة ولأي
+  // استخدام مستقبلي للحقل ده.
+  return { plate, hasCapacity: true, hasBaseline: true, capacity, baselineKmPerL, entries, discrepancies, totalGap };
 }
 
 function computeFleetVirtualTanks(vehicles, fuelRecords) {
@@ -3362,7 +3455,7 @@ function computeVehicleStats(plate, fuelRecords, odometerLogs, deliveries) {
 
   // المسافة الشهرية من قراءات العداد (أدق من الاعتماد على التعبئات وحدها)
   const monthLogs = (odometerLogs || [])
-    .filter(l => l.plate === plate && monthKeyOf(l.date) === thisMonth && l.odometer)
+    .filter(l => l.plate === plate && monthKeyOf(l.date) === thisMonth && (l.odometer || l.odometer === 0))
     .map(l => Number(l.odometer));
   const monthlyDistance = monthLogs.length > 1 ? Math.max(...monthLogs) - Math.min(...monthLogs) : 0;
 
@@ -4104,7 +4197,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
 
   function removeDelivery(id) {
     if (!confirm(tr("هل أنت متأكد من حذف سجل التسليم هذا؟ هذا الإجراء نهائي.", "Are you sure you want to delete this delivery record? This cannot be undone."))) return;
-    setDeliveries((deliveries || []).filter(d => d.id !== id));
+    setDeliveries(prev => (prev || []).filter(d => d.id !== id));
   }
   function startEditDelivery(d) {
     setEditingId(d.id);
@@ -4127,7 +4220,7 @@ function DeliveryReportsTab({ deliveries, setDeliveries, employees, isAdmin, lan
     setEditingId(null);
   }
   function saveEditDelivery(id) {
-    setDeliveries((deliveries || []).map(d => (d.id === id ? { ...d, ...editForm } : d)));
+    setDeliveries(prev => (prev || []).map(d => (d.id === id ? { ...d, ...editForm } : d)));
     setEditingId(null);
   }
   // كل حقل (السائق / المندوب الأساسي / المندوب الآخر) بيتحدَّث لوحده تمامًا —
@@ -4932,6 +5025,11 @@ function useFirestoreCollection(key, initialFn, idField = "id", live = true) {
   function setAndSync(updater) {
     const prev = stateRef.current;
     const next = typeof updater === "function" ? updater(prev) : updater;
+    // بنحدّث stateRef فورًا (مش بس بعد إعادة الرسم) — عشان لو setAndSync
+    // اتنادت مرتين سريعًا (زي نقرة مزدوجة) قبل ما React يعيد الرسم، النداء
+    // التاني يشتغل على أحدث نسخة فعليًا مش نسخة قديمة، فمفيش سجل بيتلخبط
+    // أو بيختفي من الواجهة رغم إنه اتحفظ في Firestore.
+    stateRef.current = next;
     setState(next);
     announceSaving();
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
@@ -5027,6 +5125,9 @@ function useFirestoreMap(key, initialFn, live = true) {
   function setAndSync(updater) {
     const prev = stateRef.current;
     const next = typeof updater === "function" ? updater(prev) : updater;
+    // بنحدّث stateRef فورًا (مش بس بعد إعادة الرسم) — نفس السبب الموجود في
+    // useFirestoreCollection: تفادي فقدان تحديث بسبب نداءين سريعين متتاليين.
+    stateRef.current = next;
     setState(next);
     announceSaving();
     const colRef = db.collection("etronic_data_v2").doc(key).collection("items");
@@ -5126,7 +5227,7 @@ function useNotificationPermission() {
 }
 
 async function showFleetNotification(title, body, tag, data) {
-  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
   const options = {
     body,
     icon: "./icon-192.png",
@@ -5139,13 +5240,29 @@ async function showFleetNotification(title, body, tag, data) {
   };
   try {
     if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.ready;
+      // لو تسجيل sw.js فشل بصمت (مسار خطأ، الملف مش موجود، إلخ) أو اتأخر،
+      // navigator.serviceWorker.ready كانت بتفضل معلَّقة للأبد من غير أي
+      // خطأ أو timeout — يعني مفيش إشعار كان بيظهر خالص، بصمت تام، من غير
+      // أي أثر يوضّح المشكلة. دلوقتي بنستنى 3 ثواني بس، وبعدين نرجع
+      // لـ Notification العادية بدل ما نفضل معلَّقين.
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker not ready in time")), 3000)),
+      ]);
       await reg.showNotification(title, options);
     } else {
       new Notification(title, options);
     }
+    return true;
   } catch (e) {
-    // فشل صامت — لا نريد كسر التطبيق بسبب مشكلة في الإشعارات
+    // أي فشل في مسار الـ Service Worker (تعليق، خطأ تسجيل، إلخ) — بدل ما
+    // نسيب المستخدم من غير إشعار خالص، نجرّب الإشعار العادي كبديل أخير.
+    try {
+      new Notification(title, options);
+      return true;
+    } catch (e2) {
+      return false;
+    }
   }
 }
 
@@ -5187,77 +5304,87 @@ function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTank
   React.useEffect(() => {
     if (!enabled) return;
     const seen = seenRef.current;
-    let changed = false;
+    let cancelled = false;
 
-    (oilAlerts || []).forEach(a => {
-      // إعادة التنبيه كل 500 كم إضافية بعد تجاوز الموعد، بدل تنبيه واحد فقط عند أول تجاوز
-      const key = `oil:${a.plate}:${Math.floor(a.kmSinceOil / 500)}`;
-      if (!seen.has(key)) {
+    // *** السبب الحقيقي لتوقف الإشعارات ***
+    // كل استدعاءات showFleetNotification() تحت كانت من غير await (async
+    // "fire-and-forget")، لكن seen.add(key) كان بيتنفذ فورًا في السطر اللي
+    // بعدها بغض النظر عن نجاح الإشعار من عدمه. يعني أول مرة يحاول الإشعار
+    // يظهر ويفشل لأي سبب مؤقت (Service Worker لسه بيتسجّل، تعليق، إلخ)، كان
+    // بيتسجَّل نفس المفتاح فورًا كـ"اتبعت" في localStorage بشكل دائم — فمفيش
+    // أي محاولة تانية بتحصل تاني لنفس التنبيه حتى لو المستخدم عمل تحديث
+    // للصفحة أو فتح التطبيق تاني بعدها بأيام، لأن الشرط !seen.has(key) كان
+    // بيمنع أي محاولة جديدة من الأساس. دلوقتي: seen.add(key) مبيحصلش إلا
+    // بعد ما showFleetNotification() ترجع true فعلًا (نجح العرض).
+    async function run() {
+      let changed = false;
+
+      for (const a of (oilAlerts || [])) {
+        // إعادة التنبيه كل 500 كم إضافية بعد تجاوز الموعد، بدل تنبيه واحد فقط عند أول تجاوز
+        const key = `oil:${a.plate}:${Math.floor(a.kmSinceOil / 500)}`;
+        if (seen.has(key)) continue;
         const body = a.lastOilOdometer > 0
           ? `المركبة ${a.plate} تجاوزت موعد تغيير الزيت بمقدار ${a.kmSinceOil.toFixed(0)} كم`
           : `المركبة ${a.plate} بحاجة إلى تسجيل أول عملية تغيير زيت — لا يوجد سجل سابق`;
-        showFleetNotification(
+        const shown = await showFleetNotification(
           "⚠ صيانة متأخرة",
           body,
           `oil-${a.plate}`,
           { screen_to_open: "maintenance", entity_id: a.plate }
         );
-        seen.add(key);
-        changed = true;
+        if (shown) { seen.add(key); changed = true; }
       }
-    });
 
-    (criticalFuelAlerts || []).forEach(a => {
-      const lastDate = a.rows && a.rows.length ? a.rows[a.rows.length - 1].date : "";
-      const key = `fuel:${a.plate}:${lastDate}`;
-      if (!seen.has(key)) {
-        showFleetNotification(
+      for (const a of (criticalFuelAlerts || [])) {
+        const lastDate = a.rows && a.rows.length ? a.rows[a.rows.length - 1].date : "";
+        const key = `fuel:${a.plate}:${lastDate}`;
+        if (seen.has(key)) continue;
+        const shown = await showFleetNotification(
           "🔴 اشتباه تلاعب في الوقود",
           `المركبة ${a.plate} سجّلت انحرافًا حرجًا بنسبة ${a.deviationPct.toFixed(0)}% عن معدلها الطبيعي`,
           `fuel-${a.plate}-${lastDate}`,
           { screen_to_open: "reports", entity_id: a.plate }
         );
-        seen.add(key);
-        changed = true;
+        if (shown) { seen.add(key); changed = true; }
       }
-    });
 
-    (virtualTankAlerts || []).forEach(t => {
-      const last = t.discrepancies && t.discrepancies[t.discrepancies.length - 1]; // الأحدث (المصفوفة بترتيب تصاعدي بالتاريخ)
-      if (!last) return;
-      const key = `tank:${t.plate}:${last.date}`;
-      if (!seen.has(key)) {
-        showFleetNotification(
+      for (const t of (virtualTankAlerts || [])) {
+        const last = t.discrepancies && t.discrepancies[t.discrepancies.length - 1]; // الأحدث (المصفوفة بترتيب تصاعدي بالتاريخ)
+        if (!last) continue;
+        const key = `tank:${t.plate}:${last.date}`;
+        if (seen.has(key)) continue;
+        const shown = await showFleetNotification(
           "🛢️ نقص وقود غير مفسَّر",
           `المركبة ${t.plate} — فرق ${last.gap.toFixed(1)} لتر بين الكمية المتوقعة والكمية المضافة فعليًا`,
           `tank-${t.plate}-${last.date}`,
           { screen_to_open: "reports", entity_id: t.plate }
         );
-        seen.add(key);
-        changed = true;
+        if (shown) { seen.add(key); changed = true; }
       }
-    });
 
-    (failedDeliveries || []).forEach(d => {
-      const key = `delivery:${d.id}`;
-      if (!seen.has(key)) {
-        showFleetNotification(
+      for (const d of (failedDeliveries || [])) {
+        const key = `delivery:${d.id}`;
+        if (seen.has(key)) continue;
+        const shown = await showFleetNotification(
           "⚠ تعذر التسليم",
           `لم يتم تسليم طلب ${d.customerName || ""} — المندوب: ${d.repName || ""}`,
           `delivery-${d.id}`,
           { screen_to_open: "deliveries", entity_id: String(d.id) }
         );
-        seen.add(key);
-        changed = true;
+        if (shown) { seen.add(key); changed = true; }
       }
-    });
 
-    if (changed) {
-      try {
-        // نحتفظ بآخر 500 مفتاح فقط لتفادي تضخّم localStorage مع الوقت
-        localStorage.setItem("etronic_notified_keys", JSON.stringify([...seen].slice(-500)));
-      } catch (e) {}
+      if (cancelled) return;
+      if (changed) {
+        try {
+          // نحتفظ بآخر 500 مفتاح فقط لتفادي تضخّم localStorage مع الوقت
+          localStorage.setItem("etronic_notified_keys", JSON.stringify([...seen].slice(-500)));
+        } catch (e) {}
+      }
     }
+
+    run();
+    return () => { cancelled = true; };
   }, [oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries, enabled]);
 }
 
@@ -5411,7 +5538,7 @@ function EtronicDashboard({ user, isAdmin, permissions, theme, setTheme }) {
             );
           })}
           <button onClick={() => auth.signOut()} className="flex flex-col items-center gap-1 p-1 shrink-0">
-            <Trash2 size={18} color={C.red} />
+            <LogOut size={18} color={C.red} />
             <span className="text-[9px]" style={{ color: C.red }}>{UI_TEXT.signOutShort[lang]}</span>
           </button>
         </div>
@@ -5435,7 +5562,10 @@ function LoginScreen({ errorMsg }) {
   function handleLogin() {
     if (!email || !password) return;
     setError(""); setLoading(true);
-    const cleanEmail = email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "");
+    // .toLowerCase() هنا عشان يتطابق مع نفس التطبيع اللي بيحصل في تخزين
+    // الحسابات وفي مقارنة AuthGate — Firebase نفسه بيرجّع بريد المستخدم
+    // بأحرف صغيرة دايمًا، فلازم نتعامل بنفس المنطق من البداية.
+    const cleanEmail = email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "").toLowerCase();
     auth.signInWithEmailAndPassword(cleanEmail, password)
       .catch(err => setError(tr("تعذّر تسجيل الدخول: ", "Couldn't sign you in: ") + err.message))
       .finally(() => setLoading(false));
@@ -5500,7 +5630,11 @@ function AdminTab({ accounts, setAccounts, currentUser, auditLog, refreshAccount
     // Arabic/RTL keyboards can silently insert invisible bidi-control characters
     // (e.g. U+200E/U+200F, U+202A-U+202E) around the typed email, which makes
     // Firebase reject it as "badly formatted" even though it looks correct on screen.
-    const cleanEmail = form.email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "");
+    // .toLowerCase() هنا عشان الإيميل المخزَّن في accounts يتطابق دايمًا مع
+    // الإيميل اللي هيرجّعه Firebase Auth (بيرجّعه بأحرف صغيرة دايمًا) — من
+    // غير كده، لو اتكتب الإيميل بحرف كبير هنا، الموظف هيتمنع من الدخول لاحقًا
+    // بغلط "الحساب غير مسجَّل" رغم إن حسابه اتعمل صح.
+    const cleanEmail = form.email.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\s]/g, "").toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setErr(tr("صيغة البريد الإلكتروني غير صحيحة — جرّب كتابته بلوحة مفاتيح إنجليزية بدلًا من العربية", "Invalid email format — try typing it with an English keyboard instead of Arabic"));
       return;
@@ -5509,7 +5643,7 @@ function AdminTab({ accounts, setAccounts, currentUser, auditLog, refreshAccount
     secondaryAuth.createUserWithEmailAndPassword(cleanEmail, form.password)
       .then(() => {
         secondaryAuth.signOut();
-        setAccounts([...accounts, { email: cleanEmail, name: form.name, role: "employee", active: true, permissions: [] }]);
+        setAccounts(prev => [...prev, { email: cleanEmail, name: form.name, role: "employee", active: true, permissions: [] }]);
         logAudit(currentUser, "إنشاء حساب", `${form.name} (${cleanEmail})`);
         setForm({ name: "", email: "", password: "" });
       })
@@ -5518,16 +5652,16 @@ function AdminTab({ accounts, setAccounts, currentUser, auditLog, refreshAccount
   }
   function toggleActive(email) {
     const acc = accounts.find(a => a.email === email);
-    setAccounts(accounts.map(a => a.email === email ? { ...a, active: !a.active } : a));
+    setAccounts(prev => prev.map(a => a.email === email ? { ...a, active: !a.active } : a));
     logAudit(currentUser, acc && acc.active ? "تعطيل حساب" : "تفعيل حساب", email);
   }
   function deleteAccount(email, name) {
     if (!confirm(tr(`هل أنت متأكد من حذف حساب "${name}" نهائيًا؟ هذا الإجراء نهائي ولا يمكن التراجع عنه.`, `Are you sure you want to permanently delete "${name}"'s account? This cannot be undone.`))) return;
-    setAccounts(accounts.filter(a => a.email !== email));
+    setAccounts(prev => prev.filter(a => a.email !== email));
     logAudit(currentUser, "حذف حساب", `${name} (${email})`);
   }
   function togglePermission(email, key) {
-    setAccounts(accounts.map(a => {
+    setAccounts(prev => prev.map(a => {
       if (a.email !== email) return a;
       const perms = a.permissions || [];
       const has = perms.includes(key);
@@ -5706,7 +5840,10 @@ function AuthGate() {
     async function decide(snap) {
       if (!snap.empty) {
         const list = snap.docs.map(d => d.data());
-        const mine = list.find(a => a.email === user.email);
+        // مقارنة غير حساسة لحالة الأحرف — Firebase Auth بيرجّع user.email بأحرف
+        // صغيرة دايمًا، لكن حسابات قديمة ممكن تكون اتخزنت بحرف كبير لو المسؤول
+        // كتبها كده وقت الإنشاء، فمن غير .toLowerCase() هنا كانت هتترفض بالغلط.
+        const mine = list.find(a => String(a.email || "").toLowerCase() === String(user.email || "").toLowerCase());
         handleAccount(mine);
         return;
       }
@@ -5718,15 +5855,36 @@ function AuthGate() {
         const legacySnap = await legacyRef.get({ source: "server" });
         const legacyList = legacySnap.exists ? (legacySnap.data().value || []) : [];
         if (legacyList.length > 0) {
-          const mine = legacyList.find(a => a.email === user.email);
+          const mine = legacyList.find(a => String(a.email || "").toLowerCase() === String(user.email || "").toLowerCase());
           handleAccount(mine);
           return;
         }
         const serverColSnap = await colRef.get({ source: "server" });
         if (!serverColSnap.empty) {
           const list = serverColSnap.docs.map(d => d.data());
-          const mine = list.find(a => a.email === user.email);
+          const mine = list.find(a => String(a.email || "").toLowerCase() === String(user.email || "").toLowerCase());
           handleAccount(mine);
+          return;
+        }
+        // بنستخدم علم دائم (system meta doc) بدل الاعتماد بس على "المجموعة
+        // فاضية" كشرط لمنح صلاحية Admin تلقائيًا. من غير العلم ده: لو المسؤول
+        // حذف كل الحسابات (بالغلط أو قصدًا) في أي وقت لاحق، أول حد يسجّل
+        // دخول بعدها — حتى لو كان موظف "اتحذف" قبل كده وبياناته لسه شغالة في
+        // Firebase Auth (زي ما موضّح في شاشة الإدارة) — كان هيتمنح Admin كامل
+        // تلقائيًا. العلم ده بيتحط مرة واحدة بس أول تشغيل حقيقي للنظام،
+        // وبيفضل موجود دايمًا بعدها ويمنع أي إعادة تفويض تلقائي لاحقة.
+        // ملحوظة: الحماية دي على مستوى كود الواجهة فقط — التأمين الكامل
+        // محتاج Firestore Security Rules تمنع أي كتابة على etronic_system_meta
+        // إلا لو المستند مش موجود أصلًا (create-only).
+        const systemMetaRef = db.collection("etronic_data_v2").doc("etronic_system_meta");
+        const alreadyBootstrapped = await db.runTransaction(async (tx) => {
+          const metaSnap = await tx.get(systemMetaRef);
+          if (metaSnap.exists) return true;
+          tx.set(systemMetaRef, { initialized: true, initializedAt: new Date().toISOString(), initializedBy: user.email });
+          return false;
+        });
+        if (alreadyBootstrapped) {
+          handleAccount(null);
           return;
         }
         const bootstrapped = { email: user.email, name: user.email, role: "admin", active: true };
