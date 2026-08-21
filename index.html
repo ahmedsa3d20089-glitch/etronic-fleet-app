@@ -659,8 +659,11 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
   // إحصائيات سريعة لكل مركبة (عدد الرحلات + إجمالي تكلفة التشغيل) لتغذية
   // شارتي الصفحة الرئيسية — بنفس منطق حساب "الرحلة" و"تكلفة التشغيل"
   // المستخدم بالظبط في تبويب التقارير العامة (رحلة = مندوب + مركبة + يوم،
-  // وتكلفة التشغيل = تكلفة الوقود + تكلفة الصيانة).
-  const perFillAllDash = useMemo(() => computePerFillConsumption(fuelRecords || []), [fuelRecords]);
+  // وتكلفة التشغيل = تكلفة الوقود + تكلفة الصيانة، بالجمع المباشر من
+  // fuelRecords/maintenanceRecords — مش عبر computePerFillConsumption،
+  // اللي بيتجاهل أول تعبئة وقود لكل مركبة لأنه مصمّم لحساب كفاءة الاستهلاك
+  // بين تعبئتين مش لتجميع التكلفة الإجمالية. راجع GeneralReportsTab لنفس
+  // المنطق ونفس السبب).
   const perVehicleDash = useMemo(() => {
     return (vehicles || []).map(v => {
       const stops = (deliveries || []).filter(d => d.plate === v.plate);
@@ -668,12 +671,11 @@ function DashboardTab({ customersCount, employeesCount, vehiclesCount, fuelRecor
       // مش كود المندوب لوحده (نفس المنطق المستخدم في تبويب التقارير العامة،
       // راجع الشرح هناك).
       const uniqueTrips = new Set(stops.map(d => `${d.repCode || ""}|${d.driverCode || ""}__${d.date || (d.deliveredAt || "").slice(0, 10)}`));
-      const fills = perFillAllDash.filter(r => r.plate === v.plate);
-      const fuelCost = fills.reduce((s, r) => s + r.cost, 0);
+      const fuelCost = (fuelRecords || []).filter(r => r.plate === v.plate).reduce((s, r) => s + Number(r.cost || 0), 0);
       const maintenanceCost = (maintenanceRecords || []).filter(r => r.plate === v.plate).reduce((s, r) => s + Number(r.cost || 0), 0);
       return { plate: v.plate, tripsCount: uniqueTrips.size, totalOperationalCost: fuelCost + maintenanceCost };
     });
-  }, [vehicles, deliveries, perFillAllDash, maintenanceRecords]);
+  }, [vehicles, deliveries, fuelRecords, maintenanceRecords]);
   // التلوين والتنبيه بقوا معتمدين على انحراف كل مركبة عن متوسطها التاريخي
   // (مش على رقم ثابت للأسطول كله) — نفس منطق تاب التقارير بالظبط، ونفس
   // المحرك اللي بيغذّي الشارت الجديد تحت
