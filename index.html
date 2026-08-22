@@ -4655,28 +4655,8 @@ function buildOdometerReadings(plate, odometerLogs, fuelRecords) {
 // ناقص آخر قراءة عند/قبل بدايتها (أو أقدم قراءة متاحة لو مفيش قراءة قبل
 // البداية). كده المسافة مبنية على حدود الفترة الفعلية، مش على تاريخ أقرب
 // تعبئة وقود — فمفيش كيلومترات بتتفقد أو تتحسب مرتين عند حدود الفلتر.
-//
-// anomaly = true لما يكون فيه "رجوع للخلف" في قراءات العداد ضمن الفترة
-// المعروضة (قراءة لاحقة بالتاريخ أقل من قراءة سابقة لها) — عادة بسبب
-// تغيير عداد المركبة أو خطأ إدخال. في الحالة دي بنحوّل الناتج السالب
-// لصفر بدل ما يظهر رقم غلط، لكن بنرجّع العلم عشان الواجهة تنبّه المستخدم
-// إن المسافة المعروضة ممكن تكون غير دقيقة ولازم يراجع بيانات العداد.
-// نسخة مرتّبة بقيمة تاريخ/وقت حقيقية (Date.parse) — مش مقارنة نصية —
-// مخصّصة لغرض فحص "التراجع الحقيقي" في العداد فقط، ومنفصلة تمامًا عن
-// القائمة المستخدمة في حساب المسافة (اللي بتفضل بترتيبها وفلترتها
-// الحالية بدون أي تغيير). أي قراءة بتاريخ غير صالح أو فاضي بتُستبعد من
-// المقارنة هنا فقط، عشان محدش يخترع ترتيب لقراءة معرفتش وقتها الحقيقي
-// ويطلّع تحذير كاذب.
-function sortReadingsForAnomalyCheck(readings) {
-  return readings
-    .map(r => ({ r, t: Date.parse(r.date) }))
-    .filter(x => !Number.isNaN(x.t))
-    .sort((a, b) => a.t - b.t)
-    .map(x => x.r);
-}
-
 function computeOdometerDistance(readings, dateFrom, dateTo) {
-  if (!readings.length) return { distance: 0, hasData: false, anomaly: false };
+  if (!readings.length) return { distance: 0, hasData: false };
 
   let startReading = readings[0];
   if (dateFrom) {
@@ -4687,24 +4667,11 @@ function computeOdometerDistance(readings, dateFrom, dateTo) {
   let endReading = readings[readings.length - 1];
   if (dateTo) {
     const upTo = readings.filter(r => r.date <= dateTo);
-    if (!upTo.length) return { distance: 0, hasData: false, anomaly: false };
+    if (!upTo.length) return { distance: 0, hasData: false };
     endReading = upTo[upTo.length - 1];
   }
 
-  const rawDelta = endReading.odometer - startReading.odometer;
-  const relevant = readings.filter(r => r.date >= startReading.date && r.date <= endReading.date);
-
-  // فحص التراجع لازم يقارن كل قراءة بالقراءة اللي قبلها زمنيًا (الأقدم
-  // فالأحدث)، مش بترتيب وصول البيانات — عشان كده بنستخدم نسخة مرتّبة
-  // مستقلة (chronological) هنا بس. relevant نفسها فوق دي، ومن ثمّ
-  // startReading/endReading/rawDelta/distance، كلهم من غير أي تعديل.
-  const chronological = sortReadingsForAnomalyCheck(relevant);
-  let anomaly = rawDelta < 0;
-  for (let i = 1; i < chronological.length; i++) {
-    if (chronological[i].odometer < chronological[i - 1].odometer) { anomaly = true; break; }
-  }
-
-  return { distance: Math.max(0, rawDelta), hasData: true, anomaly };
+  return { distance: Math.max(0, endReading.odometer - startReading.odometer), hasData: true };
 }
 
 function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveries, employees, odometerLogs, lang }) {
@@ -4763,9 +4730,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         // المسافة من قراءة العداد الفعلية عند حدود الفترة — مستقلة تمامًا
         // عن انتظام تعبئات الوقود، ومحسوبة بدون تكرار أو فقدان عند الحدود.
         const odometerReadings = buildOdometerReadings(v.plate, odometerLogs, fuelRecords);
-        const odoResult = computeOdometerDistance(odometerReadings, dateFrom, dateTo);
-        const totalDistance = odoResult.distance;
-        const odometerAnomaly = odoResult.anomaly;
+        const totalDistance = computeOdometerDistance(odometerReadings, dateFrom, dateTo).distance;
 
         // اللترات وتكلفة الوقود تُجمع مباشرة من كل سجلات التعبئة في الفترة
         // (زي تبويب "الوقود" بالظبط)، مش من فروقات التعبئات المتتالية —
@@ -4802,7 +4767,6 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
           totalDistance, totalLiters, kmPerLiter, literPer100km,
           fuelCost, maintenanceCost, maintenanceTypesSummary,
           totalOperationalCost, costPerTrip, costPerKm,
-          odometerAnomaly,
         };
       });
   }, [vehicles, filteredDeliveries, fuelRecords, odometerLogs, maintenanceRecords, plateFilter, dateFrom, dateTo]);
@@ -4818,15 +4782,13 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
     operationalCost: acc.operationalCost + r.totalOperationalCost,
   }), { trips: 0, delivered: 0, undelivered: 0, distance: 0, liters: 0, fuelCost: 0, maintenanceCost: 0, operationalCost: 0 }), [perVehicle]);
 
-  const anomalyPlates = perVehicle.filter(r => r.odometerAnomaly).map(r => r.plate);
-
   function exportXlsx() {
     const headers = tr(
       ["المركبة", "عدد الرحلات", "عملاء تم التسليم", "عملاء لم يتم التسليم", "إجمالي المسافة (كم)", "إجمالي اللترات", "كم/لتر", "لتر/100كم", "تكلفة الوقود", "تكلفة الصيانة", "أنواع الصيانة", "إجمالي تكلفة التشغيل", "تكلفة الرحلة", "تكلفة/كم"],
       ["Vehicle", "Trips", "Delivered", "Undelivered", "Total distance (km)", "Total liters", "Km/L", "L/100km", "Fuel cost", "Maintenance cost", "Maintenance types", "Total operational cost", "Cost per trip", "Cost/km"]
     );
     const rows = perVehicle.map(r => [
-      r.plate + (r.odometerAnomaly ? " ⚠" : ""), r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
       round1(r.fuelCost), round1(r.maintenanceCost), r.maintenanceTypesSummary || "—", round1(r.totalOperationalCost), r.costPerTrip ? round1(r.costPerTrip) : "—", round2(r.costPerKm),
     ]);
     rows.push([
@@ -4837,7 +4799,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
   }
   function exportPdf() {
     const rows = perVehicle.map(r => [
-      r.plate + (r.odometerAnomaly ? " ⚠" : ""), r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
+      r.plate, r.tripsCount, r.deliveredCount, r.undeliveredCount, round1(r.totalDistance), round1(r.totalLiters), round2(r.kmPerLiter), round2(r.literPer100km),
       round1(r.fuelCost), round1(r.maintenanceCost), round1(r.totalOperationalCost), r.costPerTrip ? round1(r.costPerTrip) : "—", round2(r.costPerKm),
     ]);
     rows.push([
@@ -4891,15 +4853,6 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
         </p>
       )}
 
-      {anomalyPlates.length > 0 && (
-        <p className="font-ui text-[11px] mb-4" style={{ color: C.red }}>
-          {tr(
-            `⚠ تم رصد تعارض في قراءة العداد (رجوع للخلف) لمركبة: ${anomalyPlates.join("، ")}. المسافة المعروضة لهذه المركبة/المركبات في الفترة الحالية قد تكون غير دقيقة — راجع سجلات "قراءة العداد" والوقود لهذه المركبة.`,
-            `⚠ An odometer conflict (backward reading) was detected for: ${anomalyPlates.join(", ")}. The distance shown for this vehicle in the current period may be inaccurate — please review its odometer and fuel records.`
-          )}
-        </p>
-      )}
-
       <div className="flex flex-wrap gap-3 mb-6">
         <KpiCard icon={Navigation} value={totals.trips} label={tr("إجمالي عدد الرحلات", "Total trips")} color={C.teal} />
         <KpiCard icon={CheckCircle} value={totals.delivered} label={tr("عملاء تم التسليم لهم", "Delivered customers")} color={C.teal} />
@@ -4946,9 +4899,7 @@ function GeneralReportsTab({ vehicles, fuelRecords, maintenanceRecords, deliveri
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{r.tripsCount}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.teal }}>{r.deliveredCount}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: r.undeliveredCount ? C.red : C.muted }}>{r.undeliveredCount}</td>
-                  <td className="p-2.5 font-mono text-xs" style={{ color: r.odometerAnomaly ? C.red : C.text }} title={r.odometerAnomaly ? tr("تعارض في قراءة العداد — راجع البيانات", "Odometer conflict — please review the data") : undefined}>
-                    {round1(r.totalDistance)}{r.odometerAnomaly ? " ⚠" : ""}
-                  </td>
+                  <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalDistance)}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.text }}>{round1(r.totalLiters)}</td>
                   <td className="p-2.5 font-mono text-xs font-bold" style={{ color: C.teal }}>{r.kmPerLiter ? round2(r.kmPerLiter) : "—"}</td>
                   <td className="p-2.5 font-mono text-xs" style={{ color: C.muted }}>{r.literPer100km ? round2(r.literPer100km) : "—"}</td>
@@ -5411,46 +5362,25 @@ function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTank
       seenRef.current = new Set();
     }
   }
-  // بيمنع تشغيل run() أكتر من مرة في نفس الوقت. كل قراءة جديدة من Firestore
-  // (حتى لو مالهاش علاقة بالتنبيهات) كانت بتولّد مصفوفات جديدة (oilAlerts,
-  // criticalFuelAlerts...) وبالتالي تعيد تشغيل useEffect ده من الأول، وممكن
-  // ده يحصل قبل ما نداء showFleetNotification() السابق يخلص (لسه بينتظر رد
-  // الـ Service Worker). من غير قفل، نداءين متوازيين كانوا بيعدّوا نفس
-  // seen.has(key) قبل ما أي منهم يضيف المفتاح فعليًا — فينتج عنه نفس
-  // التنبيه بيظهر مرتين. isRunningRef يضمن إن نداء واحد بس يشتغل في كل
-  // لحظة، ولو جت بيانات جديدة أثناء التشغيل، pendingRef بيسجّل إننا محتاجين
-  // نعيد المحاولة فور ما النداء الحالي يخلص، عشان مفيش تنبيه يتفوّت.
-  const isRunningRef = React.useRef(false);
-  const pendingRef = React.useRef(false);
-  // بيحتفظ بآخر نسخة من البيانات الواردة من كل render، حتى لو الـ effect
-  // نفسه ما اشتغلش لسه (لسه مستني دوره). محتاجين ده عشان لو تشغيلة run()
-  // حالية لسه شغالة وجت بيانات أحدث أثناء كده، إعادة المحاولة (من finally)
-  // لازم تستخدم أحدث بيانات فعليًا مش النسخة القديمة اللي كانت متاحة وقت ما
-  // الـ effect الحالي اتنشأ — وإلا كانت هتفوت أي تنبيه جديد وصل في نفس
-  // اللحظة دي (زي مركبة تانية بقت محتاجة تنبيه في نفس الثانية).
-  const latestPropsRef = React.useRef(null);
-  latestPropsRef.current = { oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries };
 
   React.useEffect(() => {
     if (!enabled) return;
     const seen = seenRef.current;
     let cancelled = false;
 
+    // *** السبب الحقيقي لتوقف الإشعارات ***
+    // كل استدعاءات showFleetNotification() تحت كانت من غير await (async
+    // "fire-and-forget")، لكن seen.add(key) كان بيتنفذ فورًا في السطر اللي
+    // بعدها بغض النظر عن نجاح الإشعار من عدمه. يعني أول مرة يحاول الإشعار
+    // يظهر ويفشل لأي سبب مؤقت (Service Worker لسه بيتسجّل، تعليق، إلخ)، كان
+    // بيتسجَّل نفس المفتاح فورًا كـ"اتبعت" في localStorage بشكل دائم — فمفيش
+    // أي محاولة تانية بتحصل تاني لنفس التنبيه حتى لو المستخدم عمل تحديث
+    // للصفحة أو فتح التطبيق تاني بعدها بأيام، لأن الشرط !seen.has(key) كان
+    // بيمنع أي محاولة جديدة من الأساس. دلوقتي: seen.add(key) مبيحصلش إلا
+    // بعد ما showFleetNotification() ترجع true فعلًا (نجح العرض).
     async function run() {
-      if (isRunningRef.current) {
-        // في نص تشغيل حالي بالفعل — بس سجّل إن فيه بيانات جديدة عايزة
-        // محاولة تانية، بدل ما نبدأ نداء متوازي يسبب تكرار.
-        pendingRef.current = true;
-        return;
-      }
-      isRunningRef.current = true;
       let changed = false;
-      // بنقرأ أحدث نسخة من البيانات وقت التنفيذ الفعلي، مش وقت إنشاء الـ
-      // effect closure — عشان لو ده تشغيل معاد بسبب pendingRef، يشتغل على
-      // آخر بيانات وصلت فعلًا.
-      const { oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries } = latestPropsRef.current;
 
-      try {
       for (const a of (oilAlerts || [])) {
         // إعادة التنبيه كل 500 كم إضافية بعد تجاوز الموعد، بدل تنبيه واحد فقط عند أول تجاوز
         const key = `oil:${a.plate}:${Math.floor(a.kmSinceOil / 500)}`;
@@ -5512,22 +5442,6 @@ function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTank
           // نحتفظ بآخر 500 مفتاح فقط لتفادي تضخّم localStorage مع الوقت
           localStorage.setItem("etronic_notified_keys", JSON.stringify([...seen].slice(-500)));
         } catch (e) {}
-      }
-      } catch (e) {
-        // لو سجل واحد فيه بيانات ناقصة/غير متوقعة تسبب استثناء (مثلًا حقل
-        // رقمي مفقود)، ما ينفعش نسيب الاستثناء يهرب من غير معالجة ويوقف باقي
-        // أنواع التنبيهات في نفس الدفعة، ولا يفضل معلّق لحد الأبد لأن ده كان
-        // بيمنع أي محاولة تانية (isRunningRef فاضل true للأبد). بنسجّل الخطأ
-        // فقط ونكمل عادي — الدفعة الجاية هتحاول تاني.
-        console.error("[etronic] fleet alert notification run failed", e);
-      } finally {
-        isRunningRef.current = false;
-        if (pendingRef.current && !cancelled) {
-          // وصلت بيانات جديدة أثناء ما كنا مشغولين — نعيد المحاولة فورًا
-          // بدل ما ننتظر تغيير تاني في البيانات ممكن يتأخر أو ميحصلش خالص.
-          pendingRef.current = false;
-          run();
-        }
       }
     }
 
