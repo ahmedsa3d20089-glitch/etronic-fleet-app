@@ -5411,25 +5411,46 @@ function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTank
       seenRef.current = new Set();
     }
   }
+  // بيمنع تشغيل run() أكتر من مرة في نفس الوقت. كل قراءة جديدة من Firestore
+  // (حتى لو مالهاش علاقة بالتنبيهات) كانت بتولّد مصفوفات جديدة (oilAlerts,
+  // criticalFuelAlerts...) وبالتالي تعيد تشغيل useEffect ده من الأول، وممكن
+  // ده يحصل قبل ما نداء showFleetNotification() السابق يخلص (لسه بينتظر رد
+  // الـ Service Worker). من غير قفل، نداءين متوازيين كانوا بيعدّوا نفس
+  // seen.has(key) قبل ما أي منهم يضيف المفتاح فعليًا — فينتج عنه نفس
+  // التنبيه بيظهر مرتين. isRunningRef يضمن إن نداء واحد بس يشتغل في كل
+  // لحظة، ولو جت بيانات جديدة أثناء التشغيل، pendingRef بيسجّل إننا محتاجين
+  // نعيد المحاولة فور ما النداء الحالي يخلص، عشان مفيش تنبيه يتفوّت.
+  const isRunningRef = React.useRef(false);
+  const pendingRef = React.useRef(false);
+  // بيحتفظ بآخر نسخة من البيانات الواردة من كل render، حتى لو الـ effect
+  // نفسه ما اشتغلش لسه (لسه مستني دوره). محتاجين ده عشان لو تشغيلة run()
+  // حالية لسه شغالة وجت بيانات أحدث أثناء كده، إعادة المحاولة (من finally)
+  // لازم تستخدم أحدث بيانات فعليًا مش النسخة القديمة اللي كانت متاحة وقت ما
+  // الـ effect الحالي اتنشأ — وإلا كانت هتفوت أي تنبيه جديد وصل في نفس
+  // اللحظة دي (زي مركبة تانية بقت محتاجة تنبيه في نفس الثانية).
+  const latestPropsRef = React.useRef(null);
+  latestPropsRef.current = { oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries };
 
   React.useEffect(() => {
     if (!enabled) return;
     const seen = seenRef.current;
     let cancelled = false;
 
-    // *** السبب الحقيقي لتوقف الإشعارات ***
-    // كل استدعاءات showFleetNotification() تحت كانت من غير await (async
-    // "fire-and-forget")، لكن seen.add(key) كان بيتنفذ فورًا في السطر اللي
-    // بعدها بغض النظر عن نجاح الإشعار من عدمه. يعني أول مرة يحاول الإشعار
-    // يظهر ويفشل لأي سبب مؤقت (Service Worker لسه بيتسجّل، تعليق، إلخ)، كان
-    // بيتسجَّل نفس المفتاح فورًا كـ"اتبعت" في localStorage بشكل دائم — فمفيش
-    // أي محاولة تانية بتحصل تاني لنفس التنبيه حتى لو المستخدم عمل تحديث
-    // للصفحة أو فتح التطبيق تاني بعدها بأيام، لأن الشرط !seen.has(key) كان
-    // بيمنع أي محاولة جديدة من الأساس. دلوقتي: seen.add(key) مبيحصلش إلا
-    // بعد ما showFleetNotification() ترجع true فعلًا (نجح العرض).
     async function run() {
+      if (isRunningRef.current) {
+        // في نص تشغيل حالي بالفعل — بس سجّل إن فيه بيانات جديدة عايزة
+        // محاولة تانية، بدل ما نبدأ نداء متوازي يسبب تكرار.
+        pendingRef.current = true;
+        return;
+      }
+      isRunningRef.current = true;
       let changed = false;
+      // بنقرأ أحدث نسخة من البيانات وقت التنفيذ الفعلي، مش وقت إنشاء الـ
+      // effect closure — عشان لو ده تشغيل معاد بسبب pendingRef، يشتغل على
+      // آخر بيانات وصلت فعلًا.
+      const { oilAlerts, criticalFuelAlerts, virtualTankAlerts, failedDeliveries } = latestPropsRef.current;
 
+      try {
       for (const a of (oilAlerts || [])) {
         // إعادة التنبيه كل 500 كم إضافية بعد تجاوز الموعد، بدل تنبيه واحد فقط عند أول تجاوز
         const key = `oil:${a.plate}:${Math.floor(a.kmSinceOil / 500)}`;
@@ -5491,6 +5512,22 @@ function useFleetAlertNotifications({ oilAlerts, criticalFuelAlerts, virtualTank
           // نحتفظ بآخر 500 مفتاح فقط لتفادي تضخّم localStorage مع الوقت
           localStorage.setItem("etronic_notified_keys", JSON.stringify([...seen].slice(-500)));
         } catch (e) {}
+      }
+      } catch (e) {
+        // لو سجل واحد فيه بيانات ناقصة/غير متوقعة تسبب استثناء (مثلًا حقل
+        // رقمي مفقود)، ما ينفعش نسيب الاستثناء يهرب من غير معالجة ويوقف باقي
+        // أنواع التنبيهات في نفس الدفعة، ولا يفضل معلّق لحد الأبد لأن ده كان
+        // بيمنع أي محاولة تانية (isRunningRef فاضل true للأبد). بنسجّل الخطأ
+        // فقط ونكمل عادي — الدفعة الجاية هتحاول تاني.
+        console.error("[etronic] fleet alert notification run failed", e);
+      } finally {
+        isRunningRef.current = false;
+        if (pendingRef.current && !cancelled) {
+          // وصلت بيانات جديدة أثناء ما كنا مشغولين — نعيد المحاولة فورًا
+          // بدل ما ننتظر تغيير تاني في البيانات ممكن يتأخر أو ميحصلش خالص.
+          pendingRef.current = false;
+          run();
+        }
       }
     }
 
